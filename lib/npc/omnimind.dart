@@ -1,27 +1,12 @@
-import 'dart:convert';
 import 'dart:math';
-import 'package:http/http.dart' as http;
 
+// OmniMind opponent generation is NOT wired yet: Omni Node (daemon v8.23.0) has no
+// generate-asset endpoint, so the opponent is always this offline persona (`source: offline`)
+// and the UI says so. The fight AI below (computeAction) runs on the phone and is unchanged.
 class OmniMindNPCHook {
-  final String host = '127.0.0.1';
-  final int daemonPort = 5000;
   Map<String, dynamic>? currentOpponent;
 
-  String get daemonUrl => 'http://$host:$daemonPort';
-
   Future<Map<String, dynamic>> generateOpponentNPC({String sign = 'Scorpio'}) async {
-    try {
-      final res = await http.get(
-        Uri.parse('$daemonUrl/api/v1/omnimind/generate-asset?type=zodiac_npc&sign=$sign'),
-      ).timeout(const Duration(seconds: 2));
-      if (res.statusCode == 200) {
-        currentOpponent = jsonDecode(res.body);
-        return currentOpponent!;
-      }
-    } catch (e) {
-      print('[OmniMind] Daemon asset generator unavailable: $e');
-    }
-
     currentOpponent = {
       'persona_id': 'npc_lpe_scorpio_offline',
       'archetype': 'ZODIAC_SCORPIO',
@@ -35,7 +20,8 @@ class OmniMindNPCHook {
         'intuition': 0.95,
         'curiosity': 0.6,
         'stamina': 0.4,
-      }
+      },
+      'source': 'offline',
     };
     return currentOpponent!;
   }
