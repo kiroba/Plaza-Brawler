@@ -1,0 +1,25 @@
+# Intel GPU (Iris Xe / UHD / Arc) or plain CPU: OpenVINO through optimum-intel.
+# Python 3.11 or 3.12. torch is only used for the scheduler and random seeds, so the small
+# CPU-only build is enough; the extra index below makes pip pick it on Linux too.
+# These pins were installed and resolved together on 2026-11-01 (Linux, Python 3.12); the
+# OpenVINO code path was smoke-tested on CPU with a tiny random model.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0
+torchvision==0.29.2
+openvino==2026.4.1
+openvino-tokenizers==2026.4.1.0
+nncf==3.4.0
+optimum==2.3.0
+optimum-intel==2.2.0
+diffusers==0.39.0
+transformers==5.5.4
+accelerate==1.15.0
+huggingface_hub==1.21.0
+safetensors==0.8.0
+tokenizers==0.22.2
+rembg==2.0.86
+onnxruntime==1.31.1
+numpy==2.4.6
+pillow==13.0.0
+pyyaml==6.0.3
+jsonschema==4.26.0

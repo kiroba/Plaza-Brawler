@@ -1,0 +1,155 @@
+# Plaza Brawler: what the AI art pipeline makes.
+#
+# Read by tools/asset_gen/generate.py. Change this file, not the script, to add a fighter,
+# a pose or an icon. `python tools/asset_gen/generate.py --dry-run` prints the plan.
+#
+# Sizes are the FINAL PNG sizes written to assets/generated/. The model draws at its own size
+# (FLUX ~1024 px, the Intel model ~512 px) and the result is trimmed, scaled and placed on
+# this canvas. transparent: true removes the background with rembg.
+
+version: 1
+output_dir: assets/generated        # relative to the repo root; git-ignored
+
+style:
+  # clean2d (default): crisp 2D side-view fighter art.
+  # pixel: same prompts, then pixelated to `pixelate.grid` px and quantized to `pixelate.colors`
+  #        colors, then scaled back up with nearest-neighbour so it stays sharp.
+  preset: clean2d
+  presets:
+    clean2d:
+      prompt: >-
+        2D side-view fighting game character sprite, full body, facing right, clean bold line art,
+        cel shading, flat colors, strong readable silhouette, consistent proportions, centered,
+        single character
+      # Used by the CLIP-based models (Intel/CPU model, SDXL ControlNet), which read only ~77
+      # tokens. The pose and the fighter's style_notes come right after it.
+      short_prompt: 2D fighting game sprite, full body, side view facing right, clean line art, cel shading
+      negative: >-
+        blurry, photo, realistic, 3d render, text, watermark, logo, signature, frame, border,
+        multiple characters, extra limbs, extra fingers, cropped, cut off feet, scenery, floor shadow
+    pixel:
+      prompt: >-
+        16-bit pixel art fighting game sprite, full body, side view facing right, limited palette,
+        crisp pixels, clean outline, single character, centered
+      short_prompt: 16-bit pixel art fighting game sprite, full body, side view facing right, crisp pixels
+      negative: >-
+        blurry, anti-aliasing, smooth gradients, photo, 3d render, text, watermark, multiple
+        characters, extra limbs, cropped, scenery
+      pixelate: {grid: 128, colors: 32}
+  # Added to every transparent asset so rembg has an easy, even background to cut away.
+  background_hint: isolated on a plain flat white background
+
+rembg_model: isnet-general-use      # Apache-2.0 weights (DIS). Also fine: isnet-anime (Apache-2.0), u2net (Apache-2.0), birefnet-general (MIT). NOT bria-rmbg (non-commercial).
+
+sheets:
+  enabled: true                     # one sprite sheet + JSON atlas per fighter (rows = poses)
+  padding: 2
+
+# Pose prompts. Seeds are fixed per fighter (frame k of a pose uses the fighter seed + k), so the
+# same character comes back for every pose. `frames` > 1 makes extra frames for animation; they
+# WILL need hand cleanup (see README).
+poses:
+  idle:  {frames: 1, prompt: "standing in a relaxed fighting stance, fists up in guard, knees slightly bent"}
+  walk:  {frames: 1, prompt: "walking forward mid-stride, one leg in front, fists up in guard"}
+  punch: {frames: 1, prompt: "throwing a straight punch forward, front arm fully extended, rear fist at chin"}
+  kick:  {frames: 1, prompt: "high side kick, front leg extended forward at chest height, arms in guard"}
+  block: {frames: 1, prompt: "blocking, both forearms raised in front of the face, body braced"}
+  hit:   {frames: 1, prompt: "recoiling from a hit, head snapped back, body leaning backwards, pained face"}
+  ko:    {frames: 1, prompt: "knocked out, lying flat on the back on the ground, eyes closed, side view"}
+
+# The fighters the game has today (lib/). Both are the OFFLINE personas the app uses until the
+# Live Persona Engine / OmniMind are wired; their looks below are a starting design, not canon.
+fighters:
+  - id: aries
+    name: Aries (player fighter, default LPE)
+    source: lib/net/omni_node.dart fetchUserLPE() offline persona; P1 colour in lib/screens/fighter_screen.dart
+    archetype: ZODIAC_ARIES
+    element: Fire
+    palette: ["#FF3300", "#FF8800", "#FFD700"]
+    style_notes: >-
+      young street brawler, red headband with small ram horns, flame-orange hand wraps,
+      sleeveless red gi with gold trim, dark pants
+    seed: 1101
+    size: [512, 512]
+    transparent: true
+    anchor: bottom                  # feet sit on the bottom edge so sprites line up on the floor
+    poses: [idle, walk, punch, kick, block, hit, ko]
+
+  - id: scorpio
+    name: Shadow Alchemist (Scorpio, OmniMind opponent)
+    source: lib/npc/omnimind.dart generateOpponentNPC() offline persona (npc_lpe_scorpio_offline)
+    archetype: ZODIAC_SCORPIO
+    element: Water
+    aura: "#4B0082"
+    palette: ["#00BFFF", "#1E90FF", "#00008B", "#4B0082"]
+    style_notes: >-
+      lean hooded alchemist fighter, indigo hooded coat with blue trim, scorpion tail emblem,
+      glowing blue vials on the belt
+    seed: 2208
+    size: [512, 512]
+    transparent: true
+    anchor: bottom
+    poses: [idle, walk, punch, kick, block, hit, ko]
+
+# Everything that is not a fighter. Fields: id, prompt, seed, size, transparent, and an optional
+# short_prompt for the CLIP-based models (77-token limit; hex colours mean nothing to them).
+stage:
+  - id: halo_plaza
+    name: Halo Plaza arena background
+    prompt: >-
+      2D side-scrolling fighting game stage background, futuristic city plaza at dusk, a glowing
+      cyan ring-shaped "halo" monument in the middle distance, neon signs, wide flat stone floor
+      across the bottom third, dark navy and cyan palette (#0D0F18, #0F172A, #00E5FF), no people,
+      no text, clean painterly 2D game art
+    short_prompt: >-
+      2D fighting game stage background, futuristic city plaza at dusk, glowing cyan halo ring
+      monument, neon signs, wide flat stone floor, dark navy and cyan colors, no people, no text
+    seed: 3301
+    size: [1920, 1080]
+    transparent: false
+
+fx:
+  - id: hit_spark
+    name: Hit spark
+    prompt: "2D fighting game hit spark effect, bright yellow and white starburst impact flash (#FFD700), sharp rays, game VFX sprite"
+    seed: 4401
+    size: [256, 256]
+    transparent: true
+  - id: block_spark
+    name: Block spark
+    prompt: "2D fighting game block effect, cyan hexagon shield flash (#00E5FF), crisp energy shards, game VFX sprite"
+    seed: 4402
+    size: [256, 256]
+    transparent: true
+  - id: ko_burst
+    name: KO burst
+    prompt: "2D fighting game knockout burst effect, large orange-red explosion ring with gold sparks (#FF3300, #FFD700), game VFX sprite"
+    seed: 4403
+    size: [512, 512]
+    transparent: true
+
+ui:
+  - id: icon_punch
+    name: Punch button icon
+    prompt: "flat game UI icon of a clenched fist, bold outline, red-orange (#FF3300) with gold highlight, simple, centered, mobile game button icon"
+    seed: 5501
+    size: [128, 128]
+    transparent: true
+  - id: icon_kick
+    name: Kick button icon
+    prompt: "flat game UI icon of a foot kicking, motion lines, bold outline, orange (#FF8800), simple, centered, mobile game button icon"
+    seed: 5502
+    size: [128, 128]
+    transparent: true
+  - id: icon_block
+    name: Block button icon
+    prompt: "flat game UI icon of a shield, bold outline, cyan (#00E5FF) on indigo (#4B0082), simple, centered, mobile game button icon"
+    seed: 5503
+    size: [128, 128]
+    transparent: true
+  - id: icon_health
+    name: Health icon
+    prompt: "flat game UI icon of a glowing green heart, bold outline, simple, centered, mobile game HUD icon"
+    seed: 5504
+    size: [128, 128]
+    transparent: true

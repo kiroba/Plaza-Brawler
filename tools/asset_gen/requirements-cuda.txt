@@ -1,0 +1,19 @@
+# NVIDIA path (Kaggle / Colab GPU): FLUX.1 [schnell] with diffusers.
+#
+# torch and numpy are NOT pinned on purpose: Kaggle and Colab ship a CUDA build of torch that
+# matches their driver, and reinstalling it breaks things. Everything this tool adds is pinned.
+# These pins were resolved together and the FLUX code path was smoke-tested with them on CPU
+# with a tiny random FLUX model (2026-11-01). They were not run on a real GPU yet.
+diffusers==0.42.1
+transformers==5.5.4
+accelerate==1.15.0
+huggingface_hub==1.33.0
+safetensors==0.8.0
+bitsandbytes==0.50.2
+sentencepiece==0.2.2
+protobuf==7.36.2
+rembg==2.0.86
+onnxruntime==1.31.1
+pillow==13.0.0
+pyyaml==6.0.3
+jsonschema==4.26.0

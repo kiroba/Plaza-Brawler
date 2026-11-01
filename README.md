@@ -34,3 +34,10 @@ tag `v0.1.0`.
 | Updates | Settings → *Check for updates* (`OmniOta.checkAndPrompt`). Plaza Brawler is not in The Omniverse release manifest yet, so there is nothing to update to until it is. |
 
 Network: cleartext HTTP is allowed to `127.0.0.1` / `localhost` only (`network_security_config.xml`).
+
+## Art pipeline (AI drafts)
+
+`tools/asset_gen/` makes first-draft sprites, the stage background, effects and icons with open
+models: FLUX.1 [schnell] on a free Kaggle/Colab GPU, or an OpenVINO model on an Intel PC.
+Output stays in `assets/generated/` (git-ignored) with a provenance manifest. See
+[tools/asset_gen/README.md](tools/asset_gen/README.md).

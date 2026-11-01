@@ -1,0 +1,15 @@
+# Model caches and compiled OpenVINO blobs: never commit weights.
+.cache/
+*.safetensors
+*.ckpt
+*.onnx
+*.bin
+*.pt
+*.pth
+*.gguf
+openvino_model.xml
+# Notebook checkpoints and local outputs
+.ipynb_checkpoints/
+*.zip
+venv/
+.venv/
