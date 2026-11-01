@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../net/omni_node.dart' show notWiredYet;
 import 'boot_screen.dart';
 import 'fighter_screen.dart';
 import 'settings_screen.dart';
@@ -63,7 +64,12 @@ class MenuScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 12),
+              const Text(
+                'OFFLINE PERSONAS • LPE + OMNIMIND: $notWiredYet',
+                style: TextStyle(fontSize: 11, color: Colors.white54),
+              ),
+              const SizedBox(height: 36),
               _buildButton(context, 'PLAY BRAWL', () {
                 Navigator.push(
                   context,

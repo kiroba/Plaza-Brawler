@@ -21,12 +21,13 @@ class _BootScreenState extends State<BootScreen> {
   }
 
   Future<void> _initializeGame() async {
-    final connected = await omniNode.checkConnection();
+    await omniNode.loadSettings();
+    await omniNode.loadIdentity();
+    final conn = await omniNode.checkConnection();
+    if (!mounted) return;
     setState(() {
-      statusText = connected
-          ? 'Omni Node Loopback (:5000): CONNECTED'
-          : 'Omni Node Loopback: OFFLINE (Container Mode)';
-      statusColor = connected ? Colors.greenAccent : Colors.orangeAccent;
+      statusText = '${omniNode.statusWords}\nFighters: offline personas (LPE / OmniMind $notWiredYet)';
+      statusColor = conn.connected ? Colors.greenAccent : Colors.orangeAccent;
     });
 
     final userLpe = await omniNode.fetchUserLPE();
@@ -86,6 +87,7 @@ class _BootScreenState extends State<BootScreen> {
             const SizedBox(height: 40),
             Text(
               statusText,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 13,
