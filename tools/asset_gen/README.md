@@ -10,8 +10,9 @@ It runs on three kinds of hardware with one command:
 | `--backend` | Hardware | Model | Speed (estimate, not measured yet) |
 |---|---|---|---|
 | `cuda` | NVIDIA GPU: free Kaggle T4 or Colab T4 | FLUX.1 [schnell], fp16 | roughly 20–60 s per image on a T4 |
-| `intel` | Intel integrated GPU (Iris Xe, UHD, Arc) | LCM Dreamshaper v7, INT8, OpenVINO | roughly 5–30 s per image |
-| `cpu` | Any PC | same as `intel`, on the CPU | roughly 1–3 min per image |
+| `intel` | Intel integrated GPU (Iris Xe, UHD, Arc), 16 GB+ RAM | FLUX.1 [schnell], INT4, OpenVINO (`--intel-model flux`) | roughly 1–4 min per 1024 px image on Iris Xe; faster on Arc |
+| `intel` | Intel GPU, under ~16 GB RAM | LCM Dreamshaper v7, INT8, OpenVINO (`--intel-model lcm`) | roughly 5–30 s per 512 px image |
+| `cpu` | Any PC | same models as `intel`, on the CPU | FLUX: roughly 3–10 min per image; LCM: roughly 1–3 min |
 | `auto` (default) | picks `cuda`, then `intel`, then `cpu` | | |
 
 Output goes to `assets/generated/` (ignored by git). Nothing generated and no model weights are
@@ -22,9 +23,13 @@ ever committed.
 - **Kaggle / Colab (FLUX.1 [schnell])** is the one to use for real art. It follows long prompts,
   keeps the character's colours and outfit much better, draws hands and poses more reliably and
   works at 1024 px.
-- **Your Intel PC (LCM Dreamshaper v7)** is a smaller, older model at 512 px. It is good for quick
-  drafts and trying prompt ideas offline, but expect simpler, less consistent characters. It only
-  reads only about 77 word pieces (tokens) of a prompt, so it uses the shorter `short_prompt` lines.
+- **Your Intel PC, default (FLUX.1 [schnell] INT4)** is the same model as Kaggle, converted to
+  OpenVINO by Intel with 4-bit weights. It reads the same full-length prompts and draws at 1024 px.
+  4-bit weights can lose a little detail compared with Kaggle's run, and it is much slower per image.
+- **Your Intel PC, low-RAM fallback (LCM Dreamshaper v7)** is a smaller, older model at 512 px. It
+  is good for quick drafts and trying prompt ideas offline, but expect simpler, less consistent
+  characters. It only reads about 77 word pieces (tokens) of a prompt, so it uses the shorter
+  `short_prompt` lines.
 
 ## Option 1: Kaggle (free NVIDIA GPU) - recommended
 
@@ -73,9 +78,18 @@ automatically; the full fp16 weights would not fit the card or Kaggle's RAM. Fla
    python tools\asset_gen\generate.py                       # everything
    ```
 
-   The first real run downloads the model (about 1 GB) and compiles it for your GPU; compiled
-   models are cached in `tools/asset_gen/.cache/` so later runs start faster.
-3. If the GPU gives trouble, force the processor: `--backend cpu` (same model, slower).
+3. **Which model runs.** `--intel-model auto` (the default) checks your PC's RAM and prints why it
+   picked what it picked:
+   - **16 GB of RAM or more → FLUX.1 [schnell] INT4** (`OpenVINO/FLUX.1-schnell-int4-ov`). The
+     first run downloads about **9.2 GB** (mostly the 6.4 GB transformer and the 2.6 GB T5 text
+     encoder) and compiles it, which can take several minutes. Expect it to use roughly 10–14 GB
+     of RAM while running (an estimate); close the browser and games first. On integrated
+     graphics the GPU shares that same RAM. No Hugging Face login is needed: this model is not gated.
+   - **Under ~16 GB → LCM Dreamshaper v7 INT8** (`OpenVINO/LCM_Dreamshaper_v7-int8-ov`, about
+     1 GB download), 512 px.
+   - Force one: `--intel-model flux` or `--intel-model lcm`. Compiled models are cached in
+     `tools/asset_gen/.cache/` so later runs start faster.
+4. If the GPU gives trouble, force the processor: `--backend cpu` (same models, slower).
 
 ## Useful flags
 
@@ -85,6 +99,7 @@ automatically; the full fp16 weights would not fit the card or Kaggle's RAM. Fla
 | `--only "fighters/scorpio/*"` | Only some images (glob on the key; repeatable). |
 | `--style pixel` | Pixel-art look: generated, then pixelated to 128 px and 32 colours. |
 | `--pose-mode controlnet` | NVIDIA only: guide poses with an OpenPose skeleton (see below). |
+| `--intel-model auto\|flux\|lcm` | Intel/CPU only: FLUX.1 [schnell] INT4 or the low-RAM LCM model (auto = by RAM). |
 | `--skip-existing` | Don't redo images that are already there. |
 | `--no-sheets`, `--no-rembg` | Skip sprite sheets / background removal. |
 | `--dump-poses DIR` | Save the OpenPose skeleton pictures, to check or edit the poses. |
@@ -124,7 +139,8 @@ to `pubspec.yaml`, and keep the matching `ASSET_MANIFEST.json` entries with it.
 
 `assets/generated/ASSET_MANIFEST.json` lists, for every file: path, sha256, prompt (as actually
 sent to the model), seed, model id and revision, model license, extra tools and their licenses
-(ControlNet, rembg weights), backend, steps, sizes and time. Each PNG also carries the prompt,
+(ControlNet, rembg weights), backend, quantization (e.g. INT4_ASYM for OpenVINO FLUX, INT8 for
+LCM, nf4 on Kaggle), which Intel model ran (`intel_model`), steps, sizes and time. Each PNG also carries the prompt,
 seed, model and backend in a text chunk. Schema: `asset_manifest.schema.json`.
 
 Keep the manifest with the final art so you can show where every image came from and under which
@@ -132,12 +148,14 @@ license, if a store review or anyone else asks.
 
 ## Licenses
 
-Checked on each model's Hugging Face page or the project's LICENSE file on 2026-11-01.
+Checked on each model's Hugging Face page or the project's LICENSE file on 2026-11-01
+(`OpenVINO/FLUX.1-schnell-int4-ov` on 2026-11-02).
 
 | Used for | Model / tool | License | Commercial use | Link |
 |---|---|---|---|---|
 | Images, NVIDIA | FLUX.1 [schnell] (`black-forest-labs/FLUX.1-schnell`) | Apache-2.0 (gated: log in + agree) | Yes | https://huggingface.co/black-forest-labs/FLUX.1-schnell |
-| Images, Intel/CPU | `OpenVINO/LCM_Dreamshaper_v7-int8-ov` → `SimianLuo/LCM_Dreamshaper_v7` | MIT on both model pages; distilled from Dreamshaper 7 / Stable Diffusion v1.5, which are **CreativeML OpenRAIL-M** | Yes, under OpenRAIL-M use restrictions (no harmful uses; the licensor claims no rights in your outputs, section 6) | https://huggingface.co/OpenVINO/LCM_Dreamshaper_v7-int8-ov |
+| Images, Intel/CPU (default) | `OpenVINO/FLUX.1-schnell-int4-ov` → `black-forest-labs/FLUX.1-schnell` | Apache-2.0 (not gated) | Yes | https://huggingface.co/OpenVINO/FLUX.1-schnell-int4-ov |
+| Images, Intel/CPU (low-RAM fallback) | `OpenVINO/LCM_Dreamshaper_v7-int8-ov` → `SimianLuo/LCM_Dreamshaper_v7` | MIT on both model pages; distilled from Dreamshaper 7 / Stable Diffusion v1.5, which are **CreativeML OpenRAIL-M** | Yes, under OpenRAIL-M use restrictions (no harmful uses; the licensor claims no rights in your outputs, section 6) | https://huggingface.co/OpenVINO/LCM_Dreamshaper_v7-int8-ov |
 | Poses, NVIDIA (optional) | `stabilityai/stable-diffusion-xl-base-1.0` | CreativeML OpenRAIL++-M | Yes, with use restrictions | https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0 |
 | Poses, NVIDIA (optional) | `xinsir/controlnet-openpose-sdxl-1.0` | Apache-2.0 | Yes | https://huggingface.co/xinsir/controlnet-openpose-sdxl-1.0 |
 | Background removal | rembg | MIT | Yes | https://github.com/danielgatis/rembg |
@@ -168,7 +186,7 @@ Not used, on purpose:
 | `kaggle_plaza_brawler_assets.ipynb` | Ready-to-run Kaggle / Colab notebook. |
 | `requirements-cuda.txt` / `requirements-intel.txt` | Pinned dependencies for each path. |
 
-## What has and hasn't been tested (2026-11-01)
+## What has and hasn't been tested (2026-11-01; Intel FLUX switch 2026-11-02)
 
 - Tested in a Linux sandbox without a GPU: `--dry-run` for every backend and style; the OpenVINO
   path end to end on CPU with a tiny random test model (load, reshape, generate, rembg, fit, sheet,
@@ -178,3 +196,7 @@ Not used, on purpose:
 - **Not tested yet:** a real FLUX.1 [schnell] run on a GPU (4-bit + offload on a T4), the SDXL
   ControlNet path, and a real LCM Dreamshaper image on an Intel GPU or CPU (the sandbox ran out
   of memory/time compiling the full model). Your first Kaggle run is the real test.
+- **Intel FLUX INT4 (2026-11-02):** `--dry-run` for `--intel-model auto|flux|lcm`, the RAM rule,
+  and the OpenVINO FLUX code path on CPU with a tiny random FLUX model (see the pull request).
+  **Not tested:** the real `OpenVINO/FLUX.1-schnell-int4-ov` (9.2 GB; the sandbox has 8 GB RAM),
+  so its speed and RAM figures above are estimates.
