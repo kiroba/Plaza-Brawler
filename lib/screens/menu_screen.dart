@@ -38,8 +38,10 @@ class MenuScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 36),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 12,
                 children: [
                   _buildProfileCard(
                     'P1: END-USER LPE',

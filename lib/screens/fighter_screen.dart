@@ -191,15 +191,17 @@ class _FighterScreenState extends State<FighterScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
+                  Expanded(
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('P1: USER LPE [${userLPE['archetype']}]',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: Color(0xFFFF3300), fontWeight: FontWeight.bold, fontSize: 12)),
                       const SizedBox(height: 4),
-                      SizedBox(
-                        width: 200,
-                        height: 14,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 200, maxHeight: 14, minHeight: 14),
                         child: LinearProgressIndicator(
                           value: playerHp / 100,
                           backgroundColor: Colors.grey[800],
@@ -208,15 +210,19 @@ class _FighterScreenState extends State<FighterScreen> {
                       ),
                     ],
                   ),
-                  Column(
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text('P2: OMNIMIND [${opponentLPE['name'] ?? 'Scorpio'}]',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 12)),
                       const SizedBox(height: 4),
-                      SizedBox(
-                        width: 200,
-                        height: 14,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 200, maxHeight: 14, minHeight: 14),
                         child: LinearProgressIndicator(
                           value: opponentHp / 100,
                           backgroundColor: Colors.grey[800],
@@ -225,12 +231,16 @@ class _FighterScreenState extends State<FighterScreen> {
                       ),
                     ],
                   ),
+                  ),
                 ],
               ),
             ),
             Expanded(
               child: Center(
-                child: Container(
+                // Shrink the fixed 640x360 arena to fit small phones; it never scrolls.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Container(
                   width: arenaWidth,
                   height: arenaHeight,
                   decoration: BoxDecoration(
@@ -279,15 +289,21 @@ class _FighterScreenState extends State<FighterScreen> {
                     ],
                   ),
                 ),
+                ),
               ),
             ),
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(16),
               color: const Color(0xFF1E293B),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: Wrap(
+                alignment: WrapAlignment.spaceEvenly,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       ElevatedButton(
                         onPressed: () => _movePlayer(-20),
