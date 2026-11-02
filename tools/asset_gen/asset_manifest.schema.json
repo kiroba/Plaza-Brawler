@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kiroba/Plaza-Brawler/tools/asset_gen/asset_manifest.schema.json",
+  "title": "Plaza Brawler ASSET_MANIFEST.json",
+  "description": "Provenance and licensing for every AI-generated file, for the Play Store review.",
+  "type": "object",
+  "required": ["schema_version", "project", "generator", "entries"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project": {"type": "string"},
+    "generator": {"type": "string"},
+    "git_commit": {"type": ["string", "null"]},
+    "updated_utc": {"type": "string"},
+    "tool_versions": {"type": "object", "additionalProperties": {"type": "string"}},
+    "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}}
+  },
+  "$defs": {
+    "license": {
+      "type": "object",
+      "required": ["id", "license", "url"],
+      "properties": {
+        "id": {"type": "string"},
+        "license": {"type": "string", "minLength": 1},
+        "url": {"type": ["string", "null"]}
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": ["file", "sha256", "key", "category", "prompt", "seed", "model", "model_license",
+                   "backend", "created_utc"],
+      "properties": {
+        "file": {"type": "string", "pattern": "^[^/\\\\][^:]*\\.(png|json)$", "description": "Relative to the folder holding ASSET_MANIFEST.json"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "key": {"type": "string"},
+        "category": {"enum": ["fighters", "stage", "fx", "ui", "sheets"]},
+        "asset_id": {"type": "string"},
+        "pose": {"type": ["string", "null"]},
+        "frame": {"type": ["integer", "null"], "minimum": 0},
+        "prompt": {"type": ["string", "null"]},
+        "negative_prompt": {"type": ["string", "null"]},
+        "seed": {"type": ["integer", "null"]},
+        "model": {"type": ["string", "null"]},
+        "model_revision": {"type": ["string", "null"]},
+        "model_license": {"$ref": "#/$defs/license"},
+        "extra_models": {"type": "array", "items": {"$ref": "#/$defs/license"}},
+        "backend": {"enum": ["cuda", "intel", "cpu"]},
+        "pose_mode": {"enum": ["prompt", "controlnet", null]},
+        "style": {"type": "string"},
+        "steps": {"type": ["integer", "null"]},
+        "guidance_scale": {"type": ["number", "null"]},
+        "draw_size": {"type": ["array", "null"], "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+        "size": {"type": ["array", "null"], "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+        "transparent": {"type": "boolean"},
+        "runtime": {"type": "object"},
+        "created_utc": {"type": "string"},
+        "kind": {"enum": ["sprite_sheet", "atlas"]},
+        "sources": {"type": "array", "items": {"type": "string"}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"category": {"not": {"const": "sheets"}}}},
+          "then": {"properties": {"prompt": {"type": "string"}, "seed": {"type": "integer"},
+                                  "model": {"type": "string"}}}
+        }
+      ]
+    }
+  }
+}

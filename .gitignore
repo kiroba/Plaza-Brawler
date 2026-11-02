@@ -58,3 +58,8 @@ pubspec.lock
 *.jks
 *.p12
 *.keystore
+
+# AI art pipeline (tools/asset_gen): generated images, sheets and manifests stay local until
+# hand-cleaned art is copied into a committed assets folder. Never commit model weights.
+/assets/generated/
+/tools/asset_gen/.cache/
