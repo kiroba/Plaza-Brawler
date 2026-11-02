@@ -30,6 +30,8 @@ tag `v0.1.0`.
 | Player identity | **Wired.** `StargateIdentity`: an Ed25519 key created on first launch. |
 | Fight events (match start, hits, match end) | **Signed and kept on this phone** (`LocalEventStore`). **Sharing them with Omni Node: not wired yet.** The node has no game endpoint, and its shared event chain is not the place for per-hit events. |
 | Your fighter (Live Persona Engine, LPE) | **Not wired yet.** There is no LPE service; an offline persona is used and labelled in the app. |
+| Your fighter (Live Persona Engine, LPE) | **Needs Omni Node 8.25+.** When the node answers, `GET :5000/api/lpe/profile?pubkey=<your key>` gives your avatar, aura tier and XP, and `GET /api/lpe/plaza` gives a real opponent from the plaza (another known avatar). Read-only, same Bearer token. With an older node, no node, or no LPE profile for your key yet, the offline personas are used and labelled in the app. This app doesn't create LPE profiles yet. |
+ main
 | Opponent generation (OmniMind) | **Not wired yet.** There is no OmniMind asset endpoint; an offline Scorpio persona is used and labelled in the app. The fight AI runs on the phone. |
 | Updates | Settings → *Check for updates* (`OmniOta.checkAndPrompt`). Plaza Brawler is not in The Omniverse release manifest yet, so there is nothing to update to until it is. |
 

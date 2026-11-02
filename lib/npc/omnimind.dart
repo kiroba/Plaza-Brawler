@@ -1,8 +1,9 @@
 import 'dart:math';
 
-// OmniMind opponent generation is NOT wired yet: Omni Node (daemon v8.23.0) has no
-// generate-asset endpoint, so the opponent is always this offline persona (`source: offline`)
-// and the UI says so. The fight AI below (computeAction) runs on the phone and is unchanged.
+// OmniMind opponent generation is NOT wired yet: Omni Node has no generate-asset endpoint. The
+// opponent is another avatar from the node's LPE plaza when there is one (Omni Node 8.25+, see
+// OmniNodeClient.fetchPlazaOpponent, which keeps these behaviour weights); otherwise this offline
+// persona (`source: offline`), and the UI says so. The fight AI below (computeAction) runs on the phone and is unchanged.
 class OmniMindNPCHook {
   Map<String, dynamic>? currentOpponent;
 

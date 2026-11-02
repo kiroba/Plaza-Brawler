@@ -12,10 +12,14 @@
 //   - Sharing game events with the node. The hub has no game/match endpoint, and
 //     /api/events/append is the shared chain that relays to every peer, so per-hit fight events
 //     don't belong there. Events stay local until a game endpoint exists.
-//   - The player's Live Persona Engine (LPE). There is no :5002 service; an offline persona is used.
+//   - The player's Live Persona Engine (LPE) needs Omni Node 8.25+ (GET /api/lpe/profile and
+//     /api/lpe/plaza, see lib/net/lpe_client.dart). With an older node, no node, or no LPE profile
+//     for this key yet, the offline persona is used and labelled "Needs Omni Node 8.25+".
 //   - OmniMind opponent generation (see lib/npc/omnimind.dart).
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:omni_core_ui/omni_core_ui.dart';
+
+import 'lpe_client.dart';
 
 const FlutterSecureStorage _store = FlutterSecureStorage(
   aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -105,17 +109,55 @@ class OmniNodeClient {
     }
   }
 
-  /// The player's Live Persona Engine profile. There is no LPE service yet, so this is always
-  /// the offline persona, marked with `source: offline`.
+  /// LPE reads on Omni Node's :5000, with the same token as [hub].
+  LpeClient get lpe => LpeClient(host: host, ipcPort: ipcPort, token: _token.isEmpty ? null : _token);
+
+  /// True when the last [fetchUserLPE] got this player's profile from Omni Node.
+  bool userLpeFromNode = false;
+
+  /// True when the last [fetchPlazaOpponent] found a real avatar on Omni Node.
+  bool opponentFromPlaza = false;
+
+  static const Map<String, dynamic> offlinePersona = {
+    'persona_id': 'user_lpe_offline',
+    'archetype': 'ZODIAC_ARIES',
+    'aura_hex': '#FF3300',
+    'palette': ['#FF3300', '#FF8800', '#FFD700'],
+    'stats': {'str': 16, 'dex': 14, 'int': 10, 'spr': 12},
+    'source': 'offline',
+  };
+
+  /// The player's Live Persona Engine profile from Omni Node (daemon 8.25+) when the node answers
+  /// and has a profile for this key; otherwise the offline persona (`source: offline`).
   Future<Map<String, dynamic>> fetchUserLPE() async {
-    return {
-      'persona_id': 'user_lpe_offline',
-      'archetype': 'ZODIAC_ARIES',
-      'aura_hex': '#FF3300',
-      'palette': ['#FF3300', '#FF8800', '#FFD700'],
-      'stats': {'str': 16, 'dex': 14, 'int': 10, 'spr': 12},
-      'source': 'offline',
-    };
+    userLpeFromNode = false;
+    if (isConnected && userPubkey.isNotEmpty) {
+      final p = await lpe.profile(userPubkey);
+      if (p != null) {
+        userLpeFromNode = true;
+        return personaFromLpe(p, offlinePersona);
+      }
+    }
+    return Map<String, dynamic>.from(offlinePersona);
+  }
+
+  /// A real opponent from the node's plaza (another known avatar), built on [fallback]'s fight
+  /// behaviour; [fallback] itself when the node has no LPE API or nobody else is in the plaza.
+  Future<Map<String, dynamic>> fetchPlazaOpponent(Map<String, dynamic> fallback) async {
+    opponentFromPlaza = false;
+    if (!isConnected) return fallback;
+    final avatars = await lpe.plaza(viewer: userPubkey);
+    final pick = avatars == null ? null : pickOpponent(avatars, userPubkey);
+    if (pick == null) return fallback;
+    opponentFromPlaza = true;
+    return personaFromLpe(pick, fallback);
+  }
+
+  /// One line for the boot screen about where both fighters came from.
+  String get fightersWords {
+    final p1 = userLpeFromNode ? 'your LPE profile' : 'offline persona (LPE: $needsNode825)';
+    final p2 = opponentFromPlaza ? 'plaza avatar' : 'offline persona (OmniMind: $notWiredYet)';
+    return 'Fighter: $p1\nOpponent: $p2';
   }
 
   /// Signs the game event with this install's Ed25519 key and stores it on this phone.
