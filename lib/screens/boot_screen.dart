@@ -26,15 +26,19 @@ class _BootScreenState extends State<BootScreen> {
     final conn = await omniNode.checkConnection();
     if (!mounted) return;
     setState(() {
-      statusText = '${omniNode.statusWords}\nFighters: offline personas (LPE / OmniMind $notWiredYet)';
+      statusText = '${omniNode.statusWords}\nLoading fighters...';
       statusColor = conn.connected ? Colors.greenAccent : Colors.orangeAccent;
     });
 
     final userLpe = await omniNode.fetchUserLPE();
-    final oppLpe = await omniMind.generateOpponentNPC(sign: 'Scorpio');
+    final offlineOpp = await omniMind.generateOpponentNPC(sign: 'Scorpio');
+    final oppLpe = await omniNode.fetchPlazaOpponent(offlineOpp);
+    omniMind.currentOpponent = oppLpe;   // the fight AI reads its behaviour weights from here
 
     GameData.userLPE = userLpe;
     GameData.opponentLPE = oppLpe;
+    if (!mounted) return;
+    setState(() => statusText = '${omniNode.statusWords}\n${omniNode.fightersWords}');
 
     await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
