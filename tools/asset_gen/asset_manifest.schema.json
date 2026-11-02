@@ -44,6 +44,8 @@
         "model_license": {"$ref": "#/$defs/license"},
         "extra_models": {"type": "array", "items": {"$ref": "#/$defs/license"}},
         "backend": {"enum": ["cuda", "intel", "cpu"]},
+        "quantization": {"type": ["string", "null"], "description": "Weight quantization of the model as run, e.g. INT4_ASYM (NNCF) for OpenVINO FLUX, INT8 for LCM, nf4 (bitsandbytes) on cuda"},
+        "intel_model": {"enum": ["flux", "lcm", null], "description": "intel/cpu backends: which OpenVINO model profile ran"},
         "pose_mode": {"enum": ["prompt", "controlnet", null]},
         "style": {"type": "string"},
         "steps": {"type": ["integer", "null"]},

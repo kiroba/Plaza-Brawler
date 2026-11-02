@@ -3,12 +3,15 @@
 
 One CLI, three backends:
   cuda   NVIDIA GPU (Kaggle / Colab T4, P100, ...): diffusers + FLUX.1 [schnell] at fp16.
-  intel  Intel GPU (integrated Iris Xe / Arc) through OpenVINO: LCM Dreamshaper v7, INT8.
-  cpu    Same OpenVINO model on the CPU. Slow, but works anywhere.
+  intel  Intel GPU (integrated Iris Xe / Arc) through OpenVINO: FLUX.1 [schnell], INT4
+         (OpenVINO/FLUX.1-schnell-int4-ov). On PCs with less than ~16 GB of RAM it falls back to
+         LCM Dreamshaper v7, INT8. Pick by hand with --intel-model flux|lcm.
+  cpu    Same OpenVINO models on the CPU. Slow, but works anywhere.
 
   python tools/asset_gen/generate.py --dry-run                 # print the plan, load nothing
   python tools/asset_gen/generate.py --backend auto            # pick cuda > intel > cpu
   python tools/asset_gen/generate.py --only "fighters/aries/*"  # just one fighter
+  python tools/asset_gen/generate.py --backend intel --intel-model lcm   # low-RAM Intel PC
   python tools/asset_gen/generate.py --validate-manifest assets/generated/ASSET_MANIFEST.json
 
 Everything it makes goes to assets/generated/ (git-ignored) together with ASSET_MANIFEST.json,
@@ -39,13 +42,21 @@ SCHEMA_VERSION = 1
 
 # --------------------------------------------------------------------------------------------
 # Models and their licenses. Every license below was checked on the model's Hugging Face page
-# or the project's LICENSE file on 2026-11-01; re-check before shipping if you change a model.
+# or the project's LICENSE file on 2026-11-01 (OpenVINO/FLUX.1-schnell-int4-ov on 2026-11-02);
+# re-check before shipping if you change a model.
 # --------------------------------------------------------------------------------------------
 LICENSES: dict[str, dict[str, str]] = {
     "black-forest-labs/FLUX.1-schnell": {
         "license": "Apache-2.0",
         "url": "https://huggingface.co/black-forest-labs/FLUX.1-schnell",
         "note": "Gated on Hugging Face: log in, accept the terms on the model page, use an HF token.",
+    },
+    "OpenVINO/FLUX.1-schnell-int4-ov": {
+        "license": "Apache-2.0",
+        "url": "https://huggingface.co/OpenVINO/FLUX.1-schnell-int4-ov",
+        "note": "OpenVINO IR of black-forest-labs/FLUX.1-schnell (Apache-2.0), weights compressed to "
+                "INT4 by NNCF (INT4_ASYM, ratio 1.0, group size 64). Not gated. Model card: needs "
+                "OpenVINO 2025.0.0+ and Optimum Intel 1.22.0+.",
     },
     "OpenVINO/LCM_Dreamshaper_v7-int8-ov": {
         "license": "MIT (as tagged on Hugging Face); lineage CreativeML OpenRAIL-M",
@@ -104,15 +115,77 @@ BACKENDS = {
         "controlnet": "xinsir/controlnet-openpose-sdxl-1.0",
         "long_side": 1024, "stage_long_side": 1344, "multiple": 64, "steps": 30, "guidance": 6.0,
     },
-    "intel": {
-        "model": "OpenVINO/LCM_Dreamshaper_v7-int8-ov",
-        "long_side": 512, "stage_long_side": 768, "multiple": 64, "steps": 6, "guidance": 8.0, "ov_device": "GPU",
+    # intel / cpu: the model settings come from INTEL_MODELS (--intel-model flux|lcm|auto).
+    "intel": {"ov_device": "GPU"},
+    "cpu": {"ov_device": "CPU"},
+}
+
+# OpenVINO models for the intel and cpu backends.
+#   prompt: "long" = the full FLUX-length prompt (T5, up to 256 tokens);
+#           "short" = the <= 77-token CLIP prompt (SD1.5-family models only).
+INTEL_MODELS = {
+    "flux": {
+        "model": "OpenVINO/FLUX.1-schnell-int4-ov",
+        "quantization": "INT4_ASYM weight compression (NNCF, ratio 1.0, group size 64)",
+        "long_side": 1024, "stage_long_side": 1344, "multiple": 16, "steps": 4, "guidance": 0.0,
+        "prompt": "long", "max_sequence_length": 256,
     },
-    "cpu": {
+    "lcm": {
         "model": "OpenVINO/LCM_Dreamshaper_v7-int8-ov",
-        "long_side": 512, "stage_long_side": 768, "multiple": 64, "steps": 6, "guidance": 8.0, "ov_device": "CPU",
+        "quantization": "INT8",
+        "long_side": 512, "stage_long_side": 768, "multiple": 64, "steps": 6, "guidance": 8.0,
+        "prompt": "short",
     },
 }
+# auto picks lcm below this much physical RAM. 15 GiB rather than 16 so a nominal 16 GB PC
+# (which reports ~15.7 GiB) still gets FLUX; the INT4 FLUX files alone are ~9.2 GB.
+FLUX_MIN_RAM_GB = 15.0
+
+
+def system_ram_gb() -> float | None:
+    """Total physical RAM in GiB, or None if it can't be read. No extra packages needed."""
+    try:
+        import psutil  # type: ignore
+        return psutil.virtual_memory().total / 1024 ** 3
+    except Exception:
+        pass
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+            st = MEMORYSTATUSEX()
+            st.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):
+                return st.ullTotalPhys / 1024 ** 3
+        except Exception:
+            return None
+        return None
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1024 ** 3
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def pick_intel_model(choice: str, ram_gb: float | None = None) -> tuple[str, str]:
+    """Return (flux|lcm, reason). ram_gb is for tests; None reads this machine."""
+    if choice in INTEL_MODELS:
+        return choice, f"--intel-model {choice}"
+    ram = system_ram_gb() if ram_gb is None else ram_gb
+    if ram is None:
+        return "lcm", ("auto: could not read system RAM, so using the low-RAM model (LCM). "
+                       "Use --intel-model flux if this PC has 16 GB or more.")
+    if ram < FLUX_MIN_RAM_GB:
+        return "lcm", (f"auto: {ram:.1f} GB RAM is under ~16 GB; FLUX.1 [schnell] INT4 needs ~9.2 GB "
+                       "for its weights alone, so using LCM Dreamshaper v7 (INT8, 512 px) instead. "
+                       "Force it with --intel-model flux.")
+    return "flux", (f"auto: {ram:.1f} GB RAM, enough for FLUX.1 [schnell] INT4. "
+                    "Use --intel-model lcm for the faster, lighter model.")
 
 # OpenPose (COCO-18) keypoints for a right-facing fighter, in a unit square (x right, y down).
 # Order: nose, neck, r_sho, r_elb, r_wri, l_sho, l_elb, l_wri, r_hip, r_knee, r_ank,
@@ -436,13 +509,16 @@ class SDXLPoseGenerator:
 class OVGenerator:
     """Intel GPU or CPU: OpenVINO through optimum-intel.
 
-    The default model is already converted to OpenVINO IR (INT8), so nothing is exported on
-    your PC. A plain diffusers model id also works (it is exported to OpenVINO on first load).
+    Both default models (FLUX.1 [schnell] INT4, LCM Dreamshaper v7 INT8) are already converted to
+    OpenVINO IR, so nothing is exported on your PC. A plain diffusers model id also works (it is
+    exported to OpenVINO on first load). FLUX reads the long prompt (T5, 256 tokens) with no
+    negative prompt and guidance 0; LCM reads the short CLIP prompt (77 tokens).
     The pipeline is reshaped to a static size per image size, and compiled models are cached
     in tools/asset_gen/.cache/ov so the second run starts faster.
     """
 
-    def __init__(self, model: str, device: str):
+    def __init__(self, model: str, device: str, prompt_kind: str = "short",
+                 max_sequence_length: int | None = None, quantization: str | None = None):
         from optimum.intel.openvino import OVDiffusionPipeline
 
         cache = HERE / ".cache" / "ov"
@@ -453,8 +529,16 @@ class OVGenerator:
         self.device = device
         self.size: tuple[int, int] | None = None
         self._warned: dict[str, bool] = {}
+        self.prompt_kind = prompt_kind
+        self.max_seq = max_sequence_length
+        # reshape() fixes T5's input to tokenizer_2.model_max_length (512 for FLUX), but FLUX.1
+        # [schnell] runs with 256 tokens; without this the static T5 rejects the 256-token input.
+        tok2 = getattr(self.pipe, "tokenizer_2", None)
+        if prompt_kind == "long" and max_sequence_length and tok2 is not None:
+            if getattr(tok2, "model_max_length", 0) > max_sequence_length:
+                tok2.model_max_length = max_sequence_length
         self.info = {"ov_device": device, "exported_on_load": export,
-                     "pipeline": type(self.pipe).__name__}
+                     "pipeline": type(self.pipe).__name__, "quantization": quantization}
         print(f"[openvino] {model} on {device} ({self.info['pipeline']})")
 
     def generate(self, job: Job, w: int, h: int, steps: int, guidance: float):
@@ -463,19 +547,24 @@ class OVGenerator:
             self.pipe.reshape(batch_size=1, height=h, width=w, num_images_per_prompt=1)
             self.pipe.compile()
             self.size = (w, h)
-        tok = getattr(self.pipe, "tokenizer", None)
+        long = self.prompt_kind == "long"
+        prompt = job.prompt if long else job.prompt_short
+        tok = getattr(self.pipe, "tokenizer_2" if long else "tokenizer", None)
+        limit = (self.max_seq or 256) if long else 77
         if tok is not None and not self._warned.get(job.key):
             try:
-                n = len(tok(job.prompt_short).input_ids)
-                if n > 77:
-                    print(f"  note: {job.key} prompt is {n} CLIP tokens; words after 77 are ignored. "
-                          "Shorten style_notes / short_prompt in assets.yaml.")
+                n = len(tok(prompt).input_ids)
+                if n > limit:
+                    print(f"  note: {job.key} prompt is {n} tokens; words after {limit} are ignored.")
             except Exception:
                 pass
             self._warned[job.key] = True
         g = torch.Generator().manual_seed(job.seed)
-        out = self.pipe(prompt=job.prompt_short, width=w, height=h, num_inference_steps=steps,
-                        guidance_scale=guidance, generator=g)
+        kw: dict[str, Any] = {}
+        if long and self.max_seq:
+            kw["max_sequence_length"] = self.max_seq
+        out = self.pipe(prompt=prompt, width=w, height=h, num_inference_steps=steps,
+                        guidance_scale=guidance, generator=g, **kw)
         return out.images[0]
 
 
@@ -733,6 +822,9 @@ def parse_args(argv=None):
     ap.add_argument("--style", default=None, help="style preset from assets.yaml (clean2d, pixel)")
     ap.add_argument("--pose-mode", choices=["prompt", "controlnet"], default="prompt",
                     help="prompt (default): poses from text. controlnet: OpenPose ControlNet (cuda only; SDXL + xinsir openpose)")
+    ap.add_argument("--intel-model", choices=["auto", "flux", "lcm"], default="auto",
+                    help="intel/cpu: flux = FLUX.1 [schnell] INT4 (1024 px, ~16 GB RAM), lcm = LCM "
+                         "Dreamshaper v7 INT8 (512 px, low RAM). auto = lcm under ~16 GB RAM, else flux")
     ap.add_argument("--model", default=None, help="override the model id/path for the chosen backend")
     ap.add_argument("--steps", type=int, default=None)
     ap.add_argument("--guidance", type=float, default=None)
@@ -785,7 +877,18 @@ def main(argv=None) -> int:
         args.pose_mode = "prompt"
     bkey = "cuda-controlnet" if (backend == "cuda" and args.pose_mode == "controlnet") else backend
     bcfg = dict(BACKENDS[bkey])
+    intel_model = None
+    if backend in ("intel", "cpu"):
+        intel_model, why = pick_intel_model(args.intel_model)
+        bcfg.update(INTEL_MODELS[intel_model])
+        print(f"[intel-model] {intel_model}: {why}")
+    elif args.intel_model != "auto":
+        print(f"[intel-model] ignored: --intel-model only applies to the intel and cpu backends")
+    long_prompt = bkey == "cuda" or bcfg.get("prompt") == "long"
     model = args.model or bcfg["model"]
+    if intel_model and args.model and args.model != INTEL_MODELS[intel_model]["model"]:
+        # Only the stock model's quantization is known; don't record it for a custom --model.
+        bcfg["quantization"] = "unknown (custom --model)"
     steps = args.steps or bcfg["steps"]
     guidance = bcfg["guidance"] if args.guidance is None else args.guidance
     long_side = args.long_side or bcfg["long_side"]
@@ -798,12 +901,15 @@ def main(argv=None) -> int:
           f"background removal: {('rembg ' + rembg_model) if needs_rembg else 'off'} | out {rel(out_dir)}")
     if bkey == "cuda-controlnet":
         print(f"      controlnet {bcfg['controlnet']} [{license_of(bcfg['controlnet'])['license']}]")
+    if intel_model:
+        print(f"      OpenVINO {intel_model}: {bcfg['quantization']} | prompts: "
+              f"{'full FLUX-length (T5, 256 tokens)' if long_prompt else 'short (CLIP, 77 tokens)'}")
 
     if args.dry_run:
         print(f"{'key':34} {'final':>10} {'draw':>10} {'seed':>6}  bg      prompt")
         for j in jobs:
             gw, gh = draw_size_for(j, bcfg, args.long_side)
-            jp = j.prompt if bkey == "cuda" else j.prompt_short
+            jp = j.prompt if long_prompt else j.prompt_short
             if not args.verbose:  # hide the shared style words so the differences show
                 for pre in style_info["prefixes"]:
                     if pre and jp.startswith(pre):
@@ -826,7 +932,9 @@ def main(argv=None) -> int:
     elif bkey == "cuda-controlnet":
         gen = SDXLPoseGenerator(model, bcfg["controlnet"], offload=args.offload)
     else:
-        gen = OVGenerator(model, bcfg["ov_device"])
+        gen = OVGenerator(model, bcfg["ov_device"], prompt_kind=bcfg["prompt"],
+                          max_sequence_length=bcfg.get("max_sequence_length"),
+                          quantization=bcfg.get("quantization"))
     remover = BackgroundRemover(rembg_model) if needs_rembg else None
     print(f"[load] {time.time() - t0:.0f}s")
 
@@ -855,7 +963,7 @@ def main(argv=None) -> int:
             extra_models.append(license_of(bcfg["controlnet"]))
         if j.transparent and remover:
             extra_models += [license_of("rembg"), license_of(f"rembg:{remover.name}")]
-        used_prompt = j.prompt if bkey == "cuda" else j.prompt_short
+        used_prompt = j.prompt if long_prompt else j.prompt_short
         meta = {"prompt": used_prompt, "seed": j.seed, "model": model, "backend": backend}
         save_png(img, j.out, meta)
         e = {
@@ -864,7 +972,9 @@ def main(argv=None) -> int:
             "prompt": used_prompt,
             "negative_prompt": j.negative if bkey == "cuda-controlnet" else None,
             "seed": j.seed, "model": model, "model_revision": rev, "model_license": license_of(model),
-            "extra_models": extra_models, "backend": backend, "pose_mode": args.pose_mode if j.pose else None,
+            "extra_models": extra_models, "backend": backend,
+            "quantization": gen.info.get("quantization"), "intel_model": intel_model,
+            "pose_mode": args.pose_mode if j.pose else None,
             "style": style_info["preset"], "steps": steps, "guidance_scale": guidance,
             "draw_size": [gw, gh], "size": list(j.size), "transparent": j.transparent and remover is not None,
             "runtime": gen.info, "created_utc": _now(),
@@ -883,7 +993,8 @@ def main(argv=None) -> int:
                     "prompt": None, "negative_prompt": None, "seed": None, "model": None,
                     "model_revision": None,
                     "model_license": {"id": "derived", "license": "Derived from the listed sources", "url": None},
-                    "extra_models": [], "backend": backend, "pose_mode": None, "style": style_info["preset"],
+                    "extra_models": [], "backend": backend, "quantization": None, "intel_model": None,
+                    "pose_mode": None, "style": style_info["preset"],
                     "steps": None, "guidance_scale": None, "draw_size": None, "size": None,
                     "transparent": kind == "sprite_sheet", "runtime": {}, "created_utc": _now(),
                     "kind": kind, "sources": s["sources"]})

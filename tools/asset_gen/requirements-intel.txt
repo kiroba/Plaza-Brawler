@@ -3,6 +3,9 @@
 # CPU-only build is enough; the extra index below makes pip pick it on Linux too.
 # These pins were installed and resolved together on 2026-11-01 (Linux, Python 3.12); the
 # OpenVINO code path was smoke-tested on CPU with a tiny random model.
+# Minimums for the default model OpenVINO/FLUX.1-schnell-int4-ov (its model card, checked
+# 2026-11-02): OpenVINO >= 2025.0.0 and Optimum Intel >= 1.22.0. The pins below meet both
+# (optimum-intel 2.2.0 itself requires openvino >= 2026.0 and transformers < 5.6).
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.15.0
 torchvision==0.29.2
