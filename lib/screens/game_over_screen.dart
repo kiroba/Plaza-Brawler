@@ -12,8 +12,10 @@ class GameOverScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F18),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               won ? 'VICTORY!' : 'DEFEAT',
@@ -27,11 +29,14 @@ class GameOverScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               won ? 'User LPE Triumphed over OmniMind NPC' : 'OmniMind NPC Overwhelmed the Arena',
+              textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: Colors.white70),
             ),
             const SizedBox(height: 40),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 20,
+              runSpacing: 12,
               children: [
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -47,7 +52,6 @@ class GameOverScreen extends StatelessWidget {
                   },
                   child: const Text('REPLAY BRAWL'),
                 ),
-                const SizedBox(width: 20),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E293B),
@@ -65,6 +69,7 @@ class GameOverScreen extends StatelessWidget {
               ],
             ),
           ],
+        ),
         ),
       ),
     );

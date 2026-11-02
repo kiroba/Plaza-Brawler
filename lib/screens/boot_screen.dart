@@ -53,8 +53,10 @@ class _BootScreenState extends State<BootScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F18),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 280,
@@ -64,8 +66,11 @@ class _BootScreenState extends State<BootScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFF00E5FF), width: 2),
               ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              padding: const EdgeInsets.all(8),
+              child: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'THE OMNIVERSE',
@@ -87,6 +92,7 @@ class _BootScreenState extends State<BootScreen> {
                   ),
                 ],
               ),
+              ),
             ),
             const SizedBox(height: 40),
             Text(
@@ -99,6 +105,7 @@ class _BootScreenState extends State<BootScreen> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
