@@ -1,76 +1,71 @@
+// Quick Fight result (spec 4.10). Real: win/lose with both fighters; pops 'retry' or 'menu'.
 import 'package:flutter/material.dart';
-import 'menu_screen.dart';
-import 'fighter_screen.dart';
+
+import '../art/fighter_painter.dart';
+import '../game/fighter.dart';
+import 'brawler_ui.dart';
 
 class GameOverScreen extends StatelessWidget {
   final bool won;
+  final FighterDef player;
+  final FighterDef opponent;
 
-  const GameOverScreen({super.key, required this.won});
+  const GameOverScreen({
+    super.key,
+    required this.won,
+    required this.player,
+    required this.opponent,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0F18),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              won ? 'VICTORY!' : 'DEFEAT',
+    return BrawlerPage(
+      showBack: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 16),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              won ? 'VICTORY!' : 'DEFEATED',
               style: TextStyle(
-                fontSize: 42,
+                fontSize: 44,
                 fontWeight: FontWeight.w900,
-                color: won ? const Color(0xFF00FF66) : const Color(0xFFFF3300),
+                color: won ? Colors.greenAccent : BrawlerColors.red,
                 letterSpacing: 2,
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              won ? 'User LPE Triumphed over OmniMind NPC' : 'OmniMind NPC Overwhelmed the Arena',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Colors.white70),
-            ),
-            const SizedBox(height: 40),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 20,
-              runSpacing: 12,
-              children: [
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E293B),
-                    foregroundColor: const Color(0xFF00E5FF),
-                    side: const BorderSide(color: Color(0xFF00E5FF)),
-                  ),
-                  onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const FighterScreen()),
-                    );
-                  },
-                  child: const Text('REPLAY BRAWL'),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E293B),
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (context) => const MenuScreen()),
-                      (route) => false,
-                    );
-                  },
-                  child: const Text('MAIN MENU'),
-                ),
-              ],
-            ),
-          ],
-        ),
-        ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FighterPortrait(def: player, size: 90),
+              const SizedBox(width: 16),
+              FighterPortrait(def: opponent, size: 90, facingRight: false),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            won
+                ? 'You beat ${opponent.name}.'
+                : '${opponent.name} wins this one.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 15),
+          ),
+          const SizedBox(height: 24),
+          BigButton(
+            'REMATCH',
+            onPressed: () => Navigator.of(context).pop('retry'),
+          ),
+          BigButton(
+            'MENU',
+            color: BrawlerColors.panel,
+            textColor: Colors.white,
+            onPressed: () => Navigator.of(context).pop('menu'),
+          ),
+        ],
       ),
     );
   }

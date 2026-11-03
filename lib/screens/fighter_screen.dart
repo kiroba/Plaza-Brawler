@@ -1,334 +1,742 @@
-import 'dart:async';
+// Fight screen (spec 4.3, 4.10): a thin view over the pure-Dart MatchEngine, stepped at a fixed 60 Hz from a
+// Ticker. Real: HUD (HP, meter, centred timer, round pips, arcade score), touch pad (d-pad + L/H/B/S, each
+// >= 56 dp) through TouchInput, desktop keys through KeyboardInput, CPU through CpuBrain, signed
+// FIGHTER_MATCH_START / FIGHTER_ROUND_END events and the match summary saved via MatchShare, kiosk pause,
+// and the CPU-vs-CPU attract loop. Placeholder art (lib/art/fighter_painter.dart); no sound yet.
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
+import '../app_state.dart';
+import '../art/fighter_painter.dart';
+import '../game/arcade.dart';
+import '../game/cpu_brain.dart';
+import '../game/fighter.dart';
+import '../game/input.dart';
+import '../game/match_engine.dart';
 import '../net/omni_node.dart';
 import '../npc/omnimind.dart';
-import 'boot_screen.dart';
-import 'game_over_screen.dart';
+import 'brawler_ui.dart';
+
+/// Everything a fight needs.
+class FightConfig {
+  final FighterDef p1;
+  final FighterDef p2;
+  final int seed;
+
+  /// 'arcade' | 'quick' | 'attract'
+  final String mode;
+
+  /// CPU difficulty for P2 (0..1).
+  final double difficulty;
+
+  /// The arcade run (for the live score in the HUD and round scoring), or null.
+  final ArcadeRun? run;
+
+  const FightConfig({
+    required this.p1,
+    required this.p2,
+    required this.seed,
+    this.mode = 'quick',
+    this.difficulty = 0.5,
+    this.run,
+  });
+
+  bool get attract => mode == 'attract';
+}
+
+/// What the fight screen pops with.
+class FightOutcome {
+  final bool playerWon;
+  final Map<String, dynamic> summary;
+  const FightOutcome({required this.playerWon, required this.summary});
+}
 
 class FighterScreen extends StatefulWidget {
-  const FighterScreen({super.key});
+  final FightConfig config;
+  const FighterScreen({super.key, required this.config});
 
   @override
   State<FighterScreen> createState() => _FighterScreenState();
 }
 
-class _FighterScreenState extends State<FighterScreen> {
-  final double arenaWidth = 640;
-  final double arenaHeight = 360;
+class _FighterScreenState extends State<FighterScreen>
+    with SingleTickerProviderStateMixin {
+  static const int _stepMicros = 1000000 ~/ MatchEngine.ticksPerSecond;
 
-  double playerX = 180;
-  double playerY = 260;
-  double playerVelocityY = 0;
-  int playerHp = 100;
-  bool isJumping = false;
-
-  double opponentX = 460;
-  double opponentY = 260;
-  int opponentHp = 100;
-
-  Timer? _gameLoopTimer;
-  bool matchOver = false;
-
-  late Map<String, dynamic> userLPE;
-  late Map<String, dynamic> opponentLPE;
-
-  final Set<LogicalKeyboardKey> _pressedKeys = {};
+  final TouchInput _touch = TouchInput();
+  final KeyboardInput _keys = KeyboardInput();
+  final FocusNode _focus = FocusNode();
+  late MatchEngine _engine;
+  late FightConfig _cfg;
+  late final Ticker _ticker;
+  Duration _last = Duration.zero;
+  int _acc = 0;
+  bool _paused = false;
+  bool _ended = false;
+  final List<int> _flash = [0, 0];
+  int _shakeFrames = 0;
+  final Random _fxRng = Random(7);
+  int _attractRound = 0;
 
   @override
   void initState() {
     super.initState();
-    userLPE = GameData.userLPE.isNotEmpty ? GameData.userLPE : {'archetype': 'ZODIAC_ARIES'};
-    opponentLPE = GameData.opponentLPE.isNotEmpty ? GameData.opponentLPE : {'name': 'Scorpio Opponent'};
-
-    omniNode.dispatchEvent('FIGHTER_MATCH_START', {
-      'user_lpe': userLPE['archetype'],
-      'opponent_lpe': opponentLPE['name']
-    });
-
-    _startGameLoop();
-  }
-
-  void _startGameLoop() {
-    _gameLoopTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      if (matchOver) return;
-      _updateGame();
-    });
-  }
-
-  void _updateGame() {
-    setState(() {
-      if (_pressedKeys.contains(LogicalKeyboardKey.keyA) || _pressedKeys.contains(LogicalKeyboardKey.arrowLeft)) {
-        playerX = (playerX - 4).clamp(30.0, arenaWidth - 30);
-      }
-      if (_pressedKeys.contains(LogicalKeyboardKey.keyD) || _pressedKeys.contains(LogicalKeyboardKey.arrowRight)) {
-        playerX = (playerX + 4).clamp(30.0, arenaWidth - 30);
-      }
-      if ((_pressedKeys.contains(LogicalKeyboardKey.keyW) || _pressedKeys.contains(LogicalKeyboardKey.arrowUp)) && !isJumping) {
-        playerVelocityY = -12;
-        isJumping = true;
-      }
-
-      if (isJumping) {
-        playerY += playerVelocityY;
-        playerVelocityY += 0.8;
-        if (playerY >= 260) {
-          playerY = 260;
-          isJumping = false;
-          playerVelocityY = 0;
-        }
-      }
-
-      final aiAction = omniMind.computeAction(opponentX, playerX, opponentHp.toDouble());
-      if (aiAction['move'] == 'WALK') {
-        final dir = (aiAction['dir'] as num).toDouble();
-        opponentX = (opponentX + dir * 2).clamp(30.0, arenaWidth - 30);
-      }
-      if (aiAction['attack'] == true && (opponentX - playerX).abs() < 70) {
-        if (DateTime.now().millisecond % 30 == 0) {
-          _executePunch('OPPONENT');
-        }
-      }
-    });
-  }
-
-  void _movePlayer(double delta) {
-    if (matchOver) return;
-    setState(() {
-      playerX = (playerX + delta).clamp(30.0, arenaWidth - 30);
-    });
-  }
-
-  void _jumpPlayer() {
-    if (matchOver || isJumping) return;
-    setState(() {
-      playerVelocityY = -12;
-      isJumping = true;
-    });
-  }
-
-  void _playerPunch() {
-    if (matchOver) return;
-    _executePunch('PLAYER');
-  }
-
-  void _executePunch(String attackerType) {
-    final dist = (playerX - opponentX).abs();
-    if (dist < 80) {
-      const dmg = 15;
-      setState(() {
-        if (attackerType == 'PLAYER') {
-          opponentHp = (opponentHp - dmg).clamp(0, 100);
-        } else {
-          playerHp = (playerHp - dmg).clamp(0, 100);
-        }
-      });
-
-      omniNode.dispatchEvent('FIGHTER_HIT', {
-        'attacker': attackerType,
-        'damage': dmg,
-        'p1_hp': playerHp,
-        'p2_hp': opponentHp,
-      });
-
-      if (playerHp <= 0 || opponentHp <= 0) {
-        _endMatch(playerHp > 0);
-      }
-    }
-  }
-
-  void _endMatch(bool playerWon) {
-    if (matchOver) return;
-    matchOver = true;
-    _gameLoopTimer?.cancel();
-
-    omniNode.dispatchEvent('FIGHTER_MATCH_END', {
-      'winner': playerWon ? 'PLAYER' : 'OPPONENT',
-      'user_hp': playerHp,
-      'opp_hp': opponentHp,
-    });
-
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => GameOverScreen(won: playerWon)),
-      );
-    });
+    _cfg = widget.config;
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    _touch.onActivity = appState.kiosk.noteActivity;
+    _engine = _newEngine(_cfg);
+    if (!_cfg.attract) appState.onPauseFight = _pauseFromKiosk;
+    _ticker = createTicker(_onTick)..start();
   }
 
   @override
   void dispose() {
-    _gameLoopTimer?.cancel();
+    _ticker.dispose();
+    _focus.dispose();
+    if (appState.onPauseFight == _pauseFromKiosk) appState.onPauseFight = null;
+    SystemChrome.setPreferredOrientations(const []);
+    super.dispose();
+  }
+
+  MatchEngine _newEngine(FightConfig c) {
+    final InputSource p1 = c.attract
+        ? CpuInput(
+            CpuBrain(def: c.p1, difficulty: 0.6, seed: c.seed ^ 0x51),
+            side: 0,
+          )
+        : MergedInput([_touch, _keys]);
+    // PvP hook: a RemoteInput goes here instead of the CPU in the multiplayer PR (spec 11).
+    final InputSource p2 = CpuInput(
+      CpuBrain(def: c.p2, difficulty: c.difficulty, seed: c.seed),
+      side: 1,
+    );
+    return MatchEngine(
+      p1: c.p1,
+      p2: c.p2,
+      input1: p1,
+      input2: p2,
+      seed: c.seed,
+      mode: c.mode,
+    );
+  }
+
+  void _pauseFromKiosk() {
+    if (!_paused && !_ended && mounted) {
+      setState(() {
+        _paused = true;
+        _touch.releaseAll();
+      });
+    }
+  }
+
+  void _resume() {
+    appState.kiosk.noteActivity();
+    setState(() {
+      _paused = false;
+      _acc = 0;
+    });
+  }
+
+  void _onTick(Duration elapsed) {
+    final dt = elapsed - _last;
+    _last = elapsed;
+    if (_paused || !mounted) return;
+    _acc += dt.inMicroseconds;
+    var steps = 0;
+    while (_acc >= _stepMicros && steps < 5) {
+      _engine.tick();
+      _afterStep();
+      _acc -= _stepMicros;
+      steps++;
+    }
+    if (steps == 5) _acc = 0; // fell behind (debugger, slow phone): drop time instead of spiralling
+    if (steps > 0) setState(() {});
+  }
+
+  void _afterStep() {
+    for (var s = 0; s < 2; s++) {
+      if (_flash[s] > 0) _flash[s]--;
+    }
+    if (_shakeFrames > 0) _shakeFrames--;
+    for (final fx in _engine.fx) {
+      if (fx.defender >= 0 && fx.defender < 2)
+        _flash[fx.defender] = fx.blocked ? 3 : 6;
+      if (fx.heavy || fx.special || fx.ko || fx.guardBreak)
+        _shakeFrames = 7; // ~120 ms
+    }
+    final events = _engine.drainEvents();
+    if (!_cfg.attract) {
+      for (final e in events) {
+        if (e.type == 'FIGHTER_ROUND_END') {
+          if (_engine.results.isNotEmpty)
+            _cfg.run?.onRound(_engine.results.last);
+          omniNode.dispatchEvent(e.type, e.payload);
+        } else if (e.type == 'FIGHTER_MATCH_END') {
+          appState.matchShare.shareMatch(e.payload);
+        } else {
+          omniNode.dispatchEvent(e.type, e.payload);
+        }
+      }
+    }
+    if (_engine.isOver && !_ended) {
+      _ended = true;
+      Future.delayed(const Duration(milliseconds: 1600), _finish);
+    }
+  }
+
+  void _finish() {
+    if (!mounted) return;
+    if (_cfg.attract) {
+      // Attract loop: next CPU pair.
+      _attractRound++;
+      final pair = omniMindOpponents.attractPair(
+        _cfg.seed + _attractRound * 13,
+      );
+      setState(() {
+        _cfg = FightConfig(
+          p1: pair[0],
+          p2: pair[1],
+          seed: _cfg.seed + _attractRound,
+          mode: 'attract',
+          difficulty: 0.6,
+        );
+        _engine = _newEngine(_cfg);
+        _ended = false;
+      });
+      return;
+    }
+    Navigator.of(context).pop(
+      FightOutcome(
+        playerWon: _engine.matchWinner == 0,
+        summary: _engine.summary(),
+      ),
+    );
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final label = event.logicalKey.keyLabel.toLowerCase();
+    bool mine = false;
+    if (event is KeyDownEvent) {
+      mine = _keys.keyDown(label);
+    } else if (event is KeyUpEvent) {
+      mine = _keys.keyUp(label);
+    } else if (event is KeyRepeatEvent) {
+      mine = KeyboardInput.keymap.containsKey(label);
+    }
+    if (mine) appState.kiosk.noteActivity();
+    return mine ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shake = _shakeFrames > 0
+        ? Offset(
+            (_fxRng.nextDouble() * 2 - 1) * 3,
+            (_fxRng.nextDouble() * 2 - 1) * 3,
+          )
+        : Offset.zero;
+    return PopScope(
+      canPop: !appState.kioskOn || _cfg.attract,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Focus(
+          focusNode: _focus,
+          autofocus: true,
+          onKeyEvent: _onKey,
+          child: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final compact = c.maxHeight < 420;
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: ArenaPainter(
+                          engine: _engine,
+                          flash: _flash,
+                          shake: shake,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      top: 4,
+                      child: _Hud(engine: _engine, run: _cfg.run),
+                    ),
+                    if (!_cfg.attract)
+                      Positioned(
+                        left: 8,
+                        right: 8,
+                        bottom: 8,
+                        child: _TouchPad(input: _touch, compact: compact),
+                      ),
+                    if (_engine.phase == MatchPhase.intro && !_cfg.attract)
+                      _Banner(text: 'ROUND ${_engine.round}'),
+                    if (_engine.phase == MatchPhase.roundOver ||
+                        _engine.phase == MatchPhase.matchOver)
+                      _Banner(text: _roundText()),
+                    if (_cfg.attract) const _AttractOverlay(),
+                    if (_paused) _PauseOverlay(onResume: _resume),
+                    if (!_cfg.attract && !appState.kioskOn)
+                      Positioned(
+                        top: 40,
+                        right: 4,
+                        child: IconButton(
+                          tooltip: 'Pause',
+                          icon: const Icon(
+                            Icons.pause_circle,
+                            color: Colors.white54,
+                          ),
+                          onPressed: _pauseFromKiosk,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _roundText() {
+    if (_engine.phase == MatchPhase.matchOver || _engine.isOver) {
+      final w = _engine.matchWinner;
+      if (w == null) return 'DRAW';
+      if (_cfg.attract)
+        return '${_engine.fighter(w).def.name.toUpperCase()} WINS';
+      return w == 0 ? 'YOU WIN!' : 'YOU LOSE';
+    }
+    final r = _engine.results.isEmpty ? null : _engine.results.last;
+    if (r == null) return '';
+    if (r.winner == null) return 'DRAW ROUND';
+    final ko = r.ko ? 'K.O.' : 'TIME';
+    return r.perfect ? '$ko  PERFECT!' : ko;
+  }
+}
+
+class _Hud extends StatelessWidget {
+  final MatchEngine engine;
+  final ArcadeRun? run;
+  const _Hud({required this.engine, this.run});
+
+  @override
+  Widget build(BuildContext context) {
+    final snap = engine.snapshot;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _SideBars(
+                f: engine.p1,
+                wins: engine.wins[0],
+                mirror: false,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              width: 52,
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: BrawlerColors.cyan.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Text(
+                '${snap.secondsLeft}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _SideBars(
+                f: engine.p2,
+                wins: engine.wins[1],
+                mirror: true,
+              ),
+            ),
+          ],
+        ),
+        if (run != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              'SCORE ${run!.liveScore}   FIGHT ${run!.reached}/${run!.length}',
+              style: const TextStyle(
+                color: BrawlerColors.gold,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SideBars extends StatelessWidget {
+  final FighterState f;
+  final int wins;
+  final bool mirror;
+  const _SideBars({required this.f, required this.wins, required this.mirror});
+
+  Widget _bar(double frac, Color color, double h) => ClipRRect(
+    borderRadius: BorderRadius.circular(3),
+    child: SizedBox(
+      height: h,
+      child: LinearProgressIndicator(
+        value: frac.clamp(0.0, 1.0),
+        backgroundColor: Colors.white12,
+        valueColor: AlwaysStoppedAnimation(color),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final hpFrac = f.hpFraction;
+    final hpColor = hpFrac > 0.5
+        ? Colors.greenAccent
+        : (hpFrac > 0.25 ? Colors.amber : BrawlerColors.red);
+    final pips = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < MatchEngine.winsNeeded; i++)
+          Container(
+            width: 9,
+            height: 9,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: i < wins ? BrawlerColors.gold : Colors.transparent,
+              border: Border.all(color: BrawlerColors.gold),
+            ),
+          ),
+      ],
+    );
+    final name = Flexible(
+      child: Text(
+        f.def.name,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: mirror
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: mirror
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          children: mirror
+              ? [pips, const SizedBox(width: 4), name]
+              : [name, const SizedBox(width: 4), pips],
+        ),
+        const SizedBox(height: 2),
+        Transform.flip(flipX: mirror, child: _bar(hpFrac, hpColor, 10)),
+        const SizedBox(height: 2),
+        Transform.flip(
+          flipX: mirror,
+          child: _bar(
+            f.meter / 100.0,
+            f.meter >= 100 ? BrawlerColors.gold : BrawlerColors.cyan,
+            5,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// D-pad bottom left (left, jump, right), actions bottom right (L, H, B, S). Each pad is >= 56 dp.
+class _TouchPad extends StatelessWidget {
+  final TouchInput input;
+  final bool compact;
+  const _TouchPad({required this.input, required this.compact});
+
+  @override
+  Widget build(BuildContext context) {
+    const s = 56.0;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _Pad(label: '◀', flag: FighterIntent.left, input: input, size: s),
+        const SizedBox(width: 6),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _Pad(label: '▲', flag: FighterIntent.up, input: input, size: s),
+            if (!compact) const SizedBox(height: s / 2),
+          ],
+        ),
+        const SizedBox(width: 6),
+        _Pad(label: '▶', flag: FighterIntent.right, input: input, size: s),
+        const Spacer(),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Pad(
+                  label: 'B',
+                  flag: FighterIntent.block,
+                  input: input,
+                  size: s,
+                  color: Colors.blueGrey,
+                ),
+                const SizedBox(width: 6),
+                _Pad(
+                  label: 'S',
+                  flag: FighterIntent.special,
+                  input: input,
+                  size: s,
+                  color: BrawlerColors.gold,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Pad(
+                  label: 'L',
+                  flag: FighterIntent.light,
+                  input: input,
+                  size: s,
+                  color: BrawlerColors.cyan,
+                ),
+                const SizedBox(width: 6),
+                _Pad(
+                  label: 'H',
+                  flag: FighterIntent.heavy,
+                  input: input,
+                  size: s,
+                  color: BrawlerColors.red,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _Pad extends StatefulWidget {
+  final String label;
+  final int flag;
+  final TouchInput input;
+  final double size;
+  final Color color;
+  const _Pad({
+    required this.label,
+    required this.flag,
+    required this.input,
+    required this.size,
+    this.color = Colors.white,
+  });
+
+  @override
+  State<_Pad> createState() => _PadState();
+}
+
+class _PadState extends State<_Pad> {
+  bool _down = false;
+
+  void _set(bool down) {
+    if (down == _down) return;
+    setState(() => _down = down);
+    if (down) {
+      widget.input.press(widget.flag);
+    } else {
+      widget.input.release(widget.flag);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_down) widget.input.release(widget.flag);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return KeyboardListener(
-      focusNode: FocusNode()..requestFocus(),
-      onKeyEvent: (event) {
-        if (event is KeyDownEvent) {
-          _pressedKeys.add(event.logicalKey);
-          if (event.logicalKey == LogicalKeyboardKey.space) {
-            _playerPunch();
-          }
-        } else if (event is KeyUpEvent) {
-          _pressedKeys.remove(event.logicalKey);
-        }
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0D0F18),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF1E293B),
-          title: const Text('PLAZA BRAWLER ARENA', style: TextStyle(color: Color(0xFF00E5FF))),
-          iconTheme: const IconThemeData(color: Color(0xFF00E5FF)),
+    return Listener(
+      onPointerDown: (_) => _set(true),
+      onPointerUp: (_) => _set(false),
+      onPointerCancel: (_) => _set(false),
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: widget.color.withValues(alpha: _down ? 0.55 : 0.22),
+          border: Border.all(
+            color: widget.color.withValues(alpha: 0.8),
+            width: 2,
+          ),
         ),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('P1: USER LPE [${userLPE['archetype']}]',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Color(0xFFFF3300), fontWeight: FontWeight.bold, fontSize: 12)),
-                      const SizedBox(height: 4),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 200, maxHeight: 14, minHeight: 14),
-                        child: LinearProgressIndicator(
-                          value: playerHp / 100,
-                          backgroundColor: Colors.grey[800],
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
-                        ),
-                      ),
-                    ],
-                  ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text('P2: OMNIMIND [${opponentLPE['name'] ?? 'Scorpio'}]',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 12)),
-                      const SizedBox(height: 4),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 200, maxHeight: 14, minHeight: 14),
-                        child: LinearProgressIndicator(
-                          value: opponentHp / 100,
-                          backgroundColor: Colors.grey[800],
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
-                        ),
-                      ),
-                    ],
-                  ),
-                  ),
-                ],
-              ),
+        child: Text(
+          widget.label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  final String text;
+  const _Banner({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    if (text.isEmpty) return const SizedBox.shrink();
+    return Center(
+      child: IgnorePointer(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: BrawlerColors.gold,
+              fontSize: 40,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 3,
+              shadows: [Shadow(blurRadius: 8, color: Colors.black)],
             ),
-            Expanded(
-              child: Center(
-                // Shrink the fixed 640x360 arena to fit small phones; it never scrolls.
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Container(
-                  width: arenaWidth,
-                  height: arenaHeight,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    border: Border.all(color: const Color(0xFF00E5FF), width: 2),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: 40,
-                        child: Container(color: const Color(0xFF1E293B)),
-                      ),
-                      Positioned(
-                        left: playerX - 32,
-                        top: playerY - 32,
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF3300),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Center(
-                            child: Icon(Icons.flash_on, color: Color(0xFFFFD700)),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: opponentX - 32,
-                        top: opponentY - 32,
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF4B0082),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Center(
-                            child: Icon(Icons.shield, color: Color(0xFF00E5FF)),
-                          ),
-                        ),
-                      ),
-                    ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "TAP TO PLAY" over the CPU-vs-CPU loop. Any tap leaves it.
+class _AttractOverlay extends StatefulWidget {
+  const _AttractOverlay();
+
+  @override
+  State<_AttractOverlay> createState() => _AttractOverlayState();
+}
+
+class _AttractOverlayState extends State<_AttractOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _blink = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _blink.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(context).maybePop(),
+        child: Align(
+          alignment: const Alignment(0, 0.6),
+          child: FadeTransition(
+            opacity: _blink,
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'PLAZA BRAWLER',
+                  style: TextStyle(
+                    color: BrawlerColors.cyan,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
+                Text(
+                  'TAP TO PLAY',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 4,
+                  ),
                 ),
-              ),
+              ],
             ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              color: const Color(0xFF1E293B),
-              child: Wrap(
-                alignment: WrapAlignment.spaceEvenly,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ElevatedButton(
-                        onPressed: () => _movePlayer(-20),
-                        child: const Text('◄', style: TextStyle(fontSize: 18)),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () => _movePlayer(20),
-                        child: const Text('►', style: TextStyle(fontSize: 18)),
-                      ),
-                    ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PauseOverlay extends StatelessWidget {
+  final VoidCallback onResume;
+  const _PauseOverlay({required this.onResume});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onResume,
+        child: Container(
+          color: Colors.black87,
+          alignment: Alignment.center,
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'PAUSED',
+                  style: TextStyle(
+                    color: BrawlerColors.gold,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
                   ),
-                  ElevatedButton(
-                    onPressed: _jumpPlayer,
-                    child: const Text('JUMP [W]', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF3300), foregroundColor: Colors.white),
-                    onPressed: _playerPunch,
-                    child: const Text('PUNCH [SPC]', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Tap to keep playing',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

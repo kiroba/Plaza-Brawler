@@ -52,9 +52,10 @@ void main() {
   });
 
   group('idle timers', () {
-    test('attract loop after 30 s idle on the title; activity resets it', () {
+    test('attract loop after 20 s idle on the title; activity resets it', () {
       final c = _Clock(), k = _kiosk(c);
-      c.advance(29999);
+      expect(KioskController.attractIdleMs, 20000);
+      c.advance(19999);
       expect(k.evaluate(KioskScreen.title), KioskAction.none);
       c.advance(1);
       expect(k.evaluate(KioskScreen.title), KioskAction.startAttract);
@@ -77,41 +78,48 @@ void main() {
       expect(k.evaluate(KioskScreen.other), KioskAction.none);
     });
 
+    test('menus left alone for 45 s go back to the title', () {
+      final c = _Clock(), k = _kiosk(c);
+      c.advance(KioskController.menuIdleMs - 1);
+      expect(k.evaluate(KioskScreen.menu), KioskAction.none);
+      c.advance(1);
+      expect(k.evaluate(KioskScreen.menu), KioskAction.returnToTitle);
+    });
+
     test('kiosk off -> no actions', () {
       final c = _Clock();
       final k = KioskController(nowMs: c.call);
       c.advance(120000);
       expect(k.evaluate(KioskScreen.title), KioskAction.none);
-      expect(k.cornerTap(), isFalse);
+      k.logoDown();
+      c.advance(5000);
+      expect(k.logoHeld(), isFalse);
     });
   });
 
   group('hidden exit', () {
-    test(
-      '5 corner taps within 3 s open the PIN prompt; slower taps do not',
-      () {
-        final c = _Clock(), k = _kiosk(c);
-        for (var i = 0; i < 5; i++) {
-          expect(k.cornerTap(), isFalse);
-          c.advance(
-            800,
-          ); // 5 taps span 3.2 s: the first falls out of the window
-        }
-        expect(k.exitPromptOpen, isFalse);
-        c.advance(
-          KioskController.exitTapWindowMs + 1,
-        ); // let the slow taps expire
-        for (var i = 0; i < 4; i++) {
-          expect(k.cornerTap(), isFalse);
-          c.advance(700);
-        }
-        expect(k.cornerTap(), isTrue); // 5 taps in 2.8 s
-        expect(k.exitPromptOpen, isTrue);
-        // Timers are held while the prompt is open.
-        c.advance(60000);
-        expect(k.evaluate(KioskScreen.title), KioskAction.none);
-      },
-    );
+    test('3 s long-press on the logo opens the PIN prompt; shorter or lifted presses do not', () {
+      final c = _Clock(), k = _kiosk(c);
+      expect(KioskController.exitHoldMs, 3000);
+      expect(k.logoHeld(), isFalse, reason: 'never pressed');
+      k.logoDown();
+      c.advance(2999);
+      expect(k.logoHeld(), isFalse);
+      k.logoUp();
+      c.advance(10);
+      expect(k.logoHeld(), isFalse, reason: 'lifted before 3 s');
+      expect(k.exitPromptOpen, isFalse);
+      k.logoDown();
+      c.advance(3000);
+      expect(k.logoHeld(), isTrue);
+      expect(k.exitPromptOpen, isTrue);
+      expect(k.logoHeld(), isFalse, reason: 'one prompt per press');
+      // Timers are held while the prompt is open.
+      c.advance(60000);
+      expect(k.evaluate(KioskScreen.title), KioskAction.none);
+      k.cancelExitPrompt();
+      expect(k.exitPromptOpen, isFalse);
+    });
 
     test(
       'right PIN leaves kiosk mode; wrong PIN does not; no prompt -> refused',
@@ -120,11 +128,9 @@ void main() {
         expect(
           k.submitExitPin('2468'),
           isFalse,
-          reason: 'needs the taps first',
+          reason: 'needs the long-press first',
         );
-        for (var i = 0; i < 5; i++) {
-          k.cornerTap();
-        }
+        _hold(k, c);
         expect(k.submitExitPin('1111'), isFalse);
         expect(k.enabled, isTrue);
         expect(k.submitExitPin('2468'), isTrue);
@@ -135,48 +141,64 @@ void main() {
 
     test('5 wrong PINs lock the prompt for 30 s', () {
       final c = _Clock(), k = _kiosk(c);
-      void open() {
-        for (var i = 0; i < 5; i++) {
-          k.cornerTap();
-        }
-      }
-
-      open();
+      _hold(k, c);
       for (var i = 0; i < KioskController.maxPinTries; i++) {
         expect(k.submitExitPin('0000'), isFalse);
       }
+      expect(k.exitPromptOpen, isFalse);
       expect(k.pinLockedMs, KioskController.pinCooldownMs);
-      open();
+      _hold(k, c);
       expect(k.submitExitPin('2468'), isFalse, reason: 'locked out');
       expect(k.checkPin('2468'), isFalse);
       c.advance(KioskController.pinCooldownMs);
       expect(k.checkPin('2468'), isTrue);
+      _hold(k, c);
       expect(k.submitExitPin('2468'), isTrue);
+    });
+
+    test('4 wrong PINs then the right one: no lockout', () {
+      final c = _Clock(), k = _kiosk(c);
+      _hold(k, c);
+      for (var i = 0; i < KioskController.maxPinTries - 1; i++) {
+        expect(k.submitExitPin('0000'), isFalse);
+      }
+      expect(k.pinLockedMs, 0);
+      expect(k.submitExitPin('2468'), isTrue);
+    });
+
+    test('disable() turns kiosk off and forgets the PIN', () {
+      final c = _Clock(), k = _kiosk(c);
+      k.disable();
+      expect(k.enabled, isFalse);
+      expect(k.pinHash, isNull);
+      expect(k.checkPin('2468'), isFalse);
     });
   });
 
-  test('session reset between players: new id and seed, taps and prompt cleared, listeners called', () {
+  test('session reset between players: new id and seed, logo hold and prompt cleared, listeners called', () {
     final c = _Clock(), k = _kiosk(c);
     final s1 = k.session;
     final heard = <int>[];
     k.onSessionReset.add((s) => heard.add(s.id));
-    k.cornerTap();
-    k.cornerTap();
+    k.logoDown();
     c.advance(5000);
     final s2 = k.resetSession();
     expect(s2.id, s1.id + 1);
     expect(s2.startedMs, c.t);
     expect(heard, [s2.id]);
     expect(k.idleMs, 0);
-    // The two earlier taps don't count toward the next player's 5.
-    for (var i = 0; i < 4; i++) {
-      expect(k.cornerTap(), isFalse);
-    }
-    expect(k.cornerTap(), isTrue);
+    // The earlier press doesn't carry over to the next player.
+    expect(k.logoHeld(), isFalse);
     final seeds = {s1.runSeed, s2.runSeed, k.resetSession().runSeed};
     expect(seeds.length, 3);
     expect(k.exitPromptOpen, isFalse);
   });
+}
+
+void _hold(KioskController k, _Clock c) {
+  k.logoDown();
+  c.advance(KioskController.exitHoldMs);
+  expect(k.logoHeld(), isTrue);
 }
 
 String _sha(String s) => sha256.convert(utf8.encode(s)).toString();

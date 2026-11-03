@@ -1,15 +1,17 @@
 // Demo-day (kiosk) mode logic (spec 4.7). Pure Dart (package:crypto only), driven by an injectable clock.
-// Real: salted sha256 PIN (4 digits, never stored in clear), idle timers (attract loop after 30 s on the title,
-// auto-return after a run, fight pause/abandon), the hidden exit (5 taps on the corner within 3 s, then the PIN)
-// with a wrong-PIN cooldown, and a fresh session per player. Not here: wakelock, immersive mode, PIN storage
-// (flutter_secure_storage) and the attract-loop screen itself; the widgets call into this class.
+// Real: salted sha256 PIN (4 digits, never stored in clear), idle timers (attract loop after 20 s on the title,
+// auto-return after a run, fight pause/abandon, menus left idle), the hidden exit (a 3 s long-press on the title
+// logo, then the PIN) with a 5-wrong-PIN lockout, and a fresh session per player. Not here: wakelock, immersive
+// mode, PIN storage (flutter_secure_storage) and the attract-loop screen itself; lib/app_state.dart calls in.
 import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
 /// Where the app is, as far as the kiosk timers care.
-enum KioskScreen { title, attract, fight, runEnd, other }
+/// [menu] is any in-between screen (character select, VS splash, how to play, high scores, initials,
+/// feedback): left alone for [KioskController.menuIdleMs] it goes back to the title.
+enum KioskScreen { title, attract, fight, runEnd, menu, other }
 
 /// What the widget layer should do now.
 enum KioskAction { none, startAttract, pauseFight, returnToTitle }
@@ -69,15 +71,15 @@ class KioskSession {
 }
 
 class KioskController {
-  // Timers (ms). Attract after 30 s idle on the title (Keith's Nov 3 brief; spec v2 said 20 s).
-  static const attractIdleMs = 30000;
+  // Timers (ms), spec 4.7: attract after 20 s idle on the title.
+  static const attractIdleMs = 20000;
   static const runEndReturnMs = 10000;
   static const fightPauseMs = 45000;
   static const fightAbandonMs = fightPauseMs + 15000;
+  static const menuIdleMs = 45000;
 
-  // Hidden exit: 5 taps on the corner within 3 s, then the PIN.
-  static const exitTaps = 5;
-  static const exitTapWindowMs = 3000;
+  // Hidden exit: hold the title logo for 3 s, then the PIN.
+  static const exitHoldMs = 3000;
 
   // Wrong-PIN cooldown so strangers can't brute-force 10,000 PINs at the table.
   static const maxPinTries = 5;
@@ -90,7 +92,7 @@ class KioskController {
   String? pinHash;
 
   int _lastActivity;
-  final List<int> _cornerTaps = [];
+  int? _logoDownAt;
   bool _exitPromptOpen = false;
   int _wrongPins = 0;
   int _lockedUntil = 0;
@@ -132,6 +134,16 @@ class KioskController {
     return true;
   }
 
+  /// Turns kiosk mode off and forgets the PIN (Settings, or after the hidden exit).
+  void disable() {
+    enabled = false;
+    pinHash = null;
+    _exitPromptOpen = false;
+    _logoDownAt = null;
+    _wrongPins = 0;
+    _lockedUntil = 0;
+  }
+
   /// Any touch or key. Resets the idle timer.
   void noteActivity() => _lastActivity = _now();
 
@@ -151,25 +163,32 @@ class KioskController {
       case KioskScreen.fight:
         if (idle >= fightAbandonMs) return KioskAction.returnToTitle;
         return idle >= fightPauseMs ? KioskAction.pauseFight : KioskAction.none;
+      case KioskScreen.menu:
+        return idle >= menuIdleMs
+            ? KioskAction.returnToTitle
+            : KioskAction.none;
       case KioskScreen.attract:
       case KioskScreen.other:
         return KioskAction.none;
     }
   }
 
-  /// A tap on the hidden corner. Returns true when this tap completes 5 within 3 s: show the PIN prompt.
-  bool cornerTap() {
-    if (!enabled) return false;
-    final t = _now();
-    _cornerTaps
-      ..add(t)
-      ..removeWhere((x) => t - x > exitTapWindowMs);
-    if (_cornerTaps.length >= exitTaps) {
-      _cornerTaps.clear();
-      _exitPromptOpen = true;
-      return true;
-    }
-    return false;
+  /// A finger went down on the title logo. The widget then starts a [exitHoldMs] timer and calls [logoHeld].
+  void logoDown() {
+    if (!enabled) return;
+    _logoDownAt = _now();
+  }
+
+  /// The finger left the logo (lifted, moved off, or the gesture was cancelled).
+  void logoUp() => _logoDownAt = null;
+
+  /// True when the logo has been held for [exitHoldMs] without a [logoUp]: the PIN prompt opens.
+  bool logoHeld() {
+    final t0 = _logoDownAt;
+    if (!enabled || t0 == null || _now() - t0 < exitHoldMs) return false;
+    _logoDownAt = null;
+    _exitPromptOpen = true;
+    return true;
   }
 
   /// The PIN typed into the exit prompt. True: kiosk mode is off. False: wrong PIN, locked out or no prompt.
@@ -200,9 +219,9 @@ class KioskController {
     noteActivity();
   }
 
-  /// Between players: new session id and run seed, idle timer and hidden-exit taps cleared, listeners told.
+  /// Between players: new session id and run seed, idle timer and logo hold cleared, listeners told.
   KioskSession resetSession() {
-    _cornerTaps.clear();
+    _logoDownAt = null;
     _exitPromptOpen = false;
     noteActivity();
     _session = _newSession(_session.id + 1);
