@@ -657,10 +657,14 @@ class MatchEngine {
       a.hitsBlocked++;
       a.damageDealt += chip;
       d.x = _clampX(d.x + h.dir * h.move.knockback / 2);
-      d.blockedAt.add(frame);
+      // A multi-hit move (Flare Rush) counts as ONE blocked hit for the guard-break rule: only its
+      // first blocked hit is recorded, so a fully blocked special alone never breaks the guard.
+      final followUpOfSameMove =
+          h.melee && h.move.maxHits > 1 && a.moveHits > 1;
       d.blockedAt.removeWhere((t) => frame - t >= Moves.guardBreakWindow);
       var broke = false;
-      if (d.blockedAt.length >= Moves.guardBreakHits) {
+      if (!followUpOfSameMove) d.blockedAt.add(frame);
+      if (!followUpOfSameMove && d.blockedAt.length >= Moves.guardBreakHits) {
         d.blockedAt.clear();
         d.blocking = false;
         d.lag = 0;

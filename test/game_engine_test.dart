@@ -260,6 +260,41 @@ void main() {
       expect(e.p1.guardBreaks, 0);
       expect(e.p2.action, FighterAction.block);
     });
+
+    test('a fully blocked Flare Rush counts as one blocked hit (never breaks alone)', () {
+      for (var d = 50.0; d <= 180; d += 10) {
+        final e = _fight('aries', 'taurus', x1: 200, x2: 200 + d);
+        const block = FighterIntent(FighterIntent.block);
+        _run(e, 4, _none, block);
+        e.p1.meter = Moves.meterMax;
+        e.tickWith(const FighterIntent(FighterIntent.special), block);
+        _run(e, 60, _none, block);
+        expect(e.p1.specialsUsed, 1, reason: 'start distance $d');
+        expect(e.p1.hitsBlocked, 3, reason: 'start distance $d');
+        expect(e.p1.guardBreaks, 0, reason: 'start distance $d');
+        expect(e.p2.blockedAt.length, lessThanOrEqualTo(1));
+      }
+    });
+
+    test(
+      '2 blocked lights + a blocked Flare Rush (as the 3rd) breaks the guard',
+      () {
+        final e = _fight('aries', 'taurus', x1: 200, x2: 250);
+        const block = FighterIntent(FighterIntent.block);
+        _run(e, 4, _none, block);
+        for (var i = 0; i < 40 && e.p1.hitsBlocked < 2; i++) {
+          e.tickWith(FighterIntent(i.isEven ? FighterIntent.light : 0), block);
+        }
+        expect(e.p1.hitsBlocked, 2);
+        expect(e.p1.guardBreaks, 0);
+        _run(e, 10, _none, block); // let the chain recover
+        e.p1.x = e.p2.x - 60;
+        e.p1.meter = Moves.meterMax;
+        e.tickWith(const FighterIntent(FighterIntent.special), block);
+        _run(e, 30, _none, block);
+        expect(e.p1.guardBreaks, 1);
+      },
+    );
   });
 
   group('rounds', () {
