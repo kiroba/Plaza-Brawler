@@ -21,11 +21,21 @@ dependencies:
   sqflite: ^2.3.0
   path: ^1.9.0
   flutter_secure_storage: ^9.2.4
+  # Demo-day (kiosk) mode keeps the screen on. Capped at the 1.5.x line that CI built with this repo's AGP 8.11.1
+  # (run 41707160090 resolved 1.5.2). Its changelog says 1.4.0+ wants AGP >= 8.12.1, so don't float past
+  # what CI has proven; newer lines move to built-in Kotlin and AGP 9 handling.
+  wakelock_plus: ">=1.3.3 <1.6.0"
+  # Feedback CSV export through the share sheet. Pinned to 11.x: share_plus 12.0.0+ needs AGP >= 8.12.1.
+  share_plus: ^11.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  # Pure-Dart tests (test/*_test.dart that import package:test, e.g. game_engine_test, kiosk_test).
+  test: ^1.24.0
+  # sqflite in plain-Dart tests (high_scores / feedback repos).
+  sqflite_common_ffi: ^2.3.0
 
 flutter:
   uses-material-design: true

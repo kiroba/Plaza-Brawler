@@ -1,49 +1,40 @@
-import 'dart:math';
+// OmniMind opponents for the fight screens (spec 5.2), slimmed down to a thin delegate.
+// Real: OmniMindClient (lib/net/omnimind_client.dart, daemon 8.26+ generate-asset) when Omni Node answers,
+// otherwise the offline zodiac table (lib/npc/zodiac_offline.dart, source 'offline'). The fight AI itself is
+// CpuBrain (lib/game/cpu_brain.dart); the old computeAction walk-and-punch AI is gone.
+import '../game/fighter.dart';
+import '../net/omni_node.dart';
+import 'zodiac_offline.dart';
 
-// OmniMind opponent generation is NOT wired yet: Omni Node has no generate-asset endpoint. The
-// opponent is another avatar from the node's LPE plaza when there is one (Omni Node 8.25+, see
-// OmniNodeClient.fetchPlazaOpponent, which keeps these behaviour weights); otherwise this offline
-// persona (`source: offline`), and the UI says so. The fight AI below (computeAction) runs on the phone and is unchanged.
-class OmniMindNPCHook {
-  Map<String, dynamic>? currentOpponent;
+class OmniMindOpponents {
+  const OmniMindOpponents();
 
-  Future<Map<String, dynamic>> generateOpponentNPC({String sign = 'Scorpio'}) async {
-    currentOpponent = {
-      'persona_id': 'npc_lpe_scorpio_offline',
-      'archetype': 'ZODIAC_SCORPIO',
-      'name': 'Shadow Alchemist (Scorpio)',
-      'zodiac_sign': 'Scorpio',
-      'element': 'Water',
-      'aura_hex': '#4B0082',
-      'palette': ['#00BFFF', '#1E90FF', '#00008B'],
-      'behavior_weights': {
-        'aggression': 0.3,
-        'intuition': 0.95,
-        'curiosity': 0.6,
-        'stamina': 0.4,
-      },
-      'source': 'offline',
-    };
-    return currentOpponent!;
+  /// The opponent for [sign] (or the boss for 'ophiuchus') with this fight's [seed]. Never throws.
+  Future<FighterDef> forSign(String sign, int seed) =>
+      omniNode.opponent(sign, seed);
+
+  /// A random offline pair for the attract loop (never touches the network).
+  List<FighterDef> attractPair(int seed) {
+    final a = zodiacSigns[seed.abs() % zodiacSigns.length];
+    var b = zodiacSigns[(seed.abs() ~/ 12 + 5) % zodiacSigns.length];
+    if (b == a)
+      b = zodiacSigns[(zodiacSigns.indexOf(a) + 6) % zodiacSigns.length];
+    return [offlineFighter(a)!, offlineFighter(b)!];
   }
 
-  Map<String, dynamic> computeAction(double npcX, double playerX, double npcHp) {
-    if (currentOpponent == null) return {'move': 'IDLE', 'attack': false};
-
-    final distance = (npcX - playerX).abs();
-    final weights = currentOpponent!['behavior_weights'] ?? {'aggression': 0.5, 'intuition': 0.5};
-
-    if (distance > 70) {
-      final dir = playerX < npcX ? -1.0 : 1.0;
-      return {'move': 'WALK', 'dir': dir, 'attack': false};
-    } else {
-      final aggression = (weights['aggression'] as num).toDouble();
-      final intuition = (weights['intuition'] as num).toDouble();
-      final attackChance = aggression + (intuition * 0.2);
-      final shouldAttack = Random().nextDouble() < attackChance;
-      return {'move': 'ATTACK', 'attack': shouldAttack, 'attackType': 'PUNCH'};
+  /// "OmniMind", "Offline", "LPE" or "Plaza" for the VS splash chip.
+  static String chip(FighterDef f) {
+    switch (f.source) {
+      case 'omnimind':
+        return 'OmniMind';
+      case 'lpe':
+        return 'LPE';
+      case 'plaza':
+        return 'Plaza';
+      default:
+        return 'Offline';
     }
   }
 }
 
-final omniMind = OmniMindNPCHook();
+const omniMindOpponents = OmniMindOpponents();
