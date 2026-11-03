@@ -188,7 +188,8 @@ class _FighterScreenState extends State<FighterScreen>
             _cfg.run?.onRound(_engine.results.last);
           omniNode.dispatchEvent(e.type, e.payload);
         } else if (e.type == 'FIGHTER_MATCH_END') {
-          appState.matchShare.shareMatch(e.payload);
+          // Saved on this phone; also POSTed once to Omni Node when sharing is on (lib/net/match_share.dart).
+          appState.matchShare.shareMatch(e.payload, score: _cfg.run?.liveScore);
         } else {
           omniNode.dispatchEvent(e.type, e.payload);
         }

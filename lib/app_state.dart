@@ -120,10 +120,6 @@ class AppState extends ChangeNotifier {
   static const _kShare = 'plaza_brawler_share_matches_v2';
   static const _kShareOld = 'plaza_brawler_share_matches_v1';
   static const _kMuted = 'plaza_brawler_sfx_muted_v1';
-
-  /// False until Omni Node can receive match results (the daemon's match endpoint). While false the
-  /// "Share my match results" switch is shown off and disabled, and sharing can't be turned on.
-  static final bool nodeAcceptsMatchShares = false;
   static const _kKioskOn = 'plaza_brawler_kiosk_on_v1';
   static const _kKioskPin = 'plaza_brawler_kiosk_pin_v1';
 
@@ -133,6 +129,8 @@ class AppState extends ChangeNotifier {
   late final MatchShare matchShare = MatchShare(
     saveLocal: (summary) =>
         omniNode.dispatchEvent('FIGHTER_MATCH_END', summary),
+    token: () => omniNode.token,
+    appVersion: appVersion,
   );
   final KioskRouteObserver routeObserver = KioskRouteObserver();
 
@@ -159,6 +157,17 @@ class AppState extends ChangeNotifier {
 
   bool get kioskOn => kiosk.enabled;
   bool get shareEnabled => matchShare.shareEnabled;
+
+  /// True once Omni Node on this phone lists "games_match" in node-health (daemon 8.28.0+). Until then the
+  /// "Share my match results" switch is shown off and disabled ("turns on when Omni Node supports it").
+  bool get nodeAcceptsMatchShares => matchShare.nodeSupportsMatches == true;
+
+  /// Re-reads node-health's features (boot, Settings refresh). Never throws.
+  Future<void> probeMatchSharing() async {
+    await matchShare.probe();
+    notifyListeners();
+  }
+
   bool get soundOn => !sfx.muted;
 
   /// True when the how-to-play card should come before the next fight (first fight per install, or per
@@ -187,8 +196,8 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     chosenSign = await _read(_kSign);
     _howToSeen = await _read(_kHowTo) == '1';
-    matchShare.shareEnabled =
-        nodeAcceptsMatchShares && await _read(_kShare) == '1';
+    // Off unless the player turned it on (v2 key; the node's support is checked separately).
+    matchShare.shareEnabled = await _read(_kShare) == '1';
     await _write(_kShareOld, null);
     sfx.muted = await _read(_kMuted) == '1';
     // Not awaited: a slow or broken audio service must never hold up boot. Sfx never throws.
@@ -219,7 +228,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> setShareEnabled(bool on) async {
-    if (!nodeAcceptsMatchShares) on = false;
+    if (on && !nodeAcceptsMatchShares)
+      return; // can't turn on until the node supports it
     matchShare.shareEnabled = on;
     await _write(_kShare, on ? '1' : '0');
     notifyListeners();

@@ -37,6 +37,7 @@ class _BootScreenState extends State<BootScreen> {
     });
     await omniNode.refreshLpe();
     await omniNode.probeOmniMind();
+    await appState.probeMatchSharing();
     if (!mounted) return;
     setState(
       () => statusText = '${omniNode.statusWords}\n${omniNode.fightersWords}',
