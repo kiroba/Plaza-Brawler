@@ -1,6 +1,7 @@
 // Settings (spec 4.7, 4.8, 5). Kept: Omni Node token entry, connection dot + words, "Check for updates"
 // (OmniOta.checkAndPrompt). Added: real status lines for the LPE fighter, OmniMind opponents and match sharing,
-// the "Share my match results" toggle (default off; nothing is sent until the node has a game endpoint),
+// the "Share my match results" toggle (off for every install; shown disabled, "turns on when Omni Node
+// supports it", until the node can receive match results), a "Sound effects" switch (mute),
 // feedback summary + CSV export (share sheet), Reset demo data, and Demo-day mode (set a 4-digit PIN to turn
 // it on; turning it off clears the PIN). The whole screen is hidden while Demo-day mode is on.
 import 'package:flutter/material.dart';
@@ -229,17 +230,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _line('Sharing fights with Omni Node', matchShareStatus),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text(
+            title: Text(
               'Share my match results',
+              style: TextStyle(
+                color: AppState.nodeAcceptsMatchShares
+                    ? Colors.white
+                    : Colors.white54,
+              ),
+            ),
+            subtitle: Text(
+              AppState.nodeAcceptsMatchShares
+                  ? 'Off by default. Turn on to send your results to Omni Node.'
+                  : 'Off. Turns on when Omni Node supports it; until then results stay on this phone.',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            // Waiting state: off and disabled until the node has a match endpoint.
+            value: AppState.nodeAcceptsMatchShares && appState.shareEnabled,
+            onChanged: AppState.nodeAcceptsMatchShares
+                ? (v) async {
+                    await appState.setShareEnabled(v);
+                    if (mounted) setState(() {});
+                  }
+                : null,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Sound effects',
               style: TextStyle(color: Colors.white),
             ),
             subtitle: const Text(
-              'Off by default. Results stay on this phone until Omni Node can receive them.',
+              'Hits, blocks, K.O. and menu clicks.',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
-            value: appState.shareEnabled,
+            value: appState.soundOn,
             onChanged: (v) async {
-              await appState.setShareEnabled(v);
+              await appState.setSoundOn(v);
               if (mounted) setState(() {});
             },
           ),

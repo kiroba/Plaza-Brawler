@@ -37,6 +37,14 @@ tag `v0.1.0`.
 
 Network: cleartext HTTP is allowed to `127.0.0.1` / `localhost` only (`network_security_config.xml`).
 
+## Sound
+
+Hit, block, K.O. and menu-select sounds are in `assets/sfx/`. They are synthesized by
+`tools/sfx_gen.py` (standard library only) and released as CC0; see
+[assets/sfx/CREDITS.md](assets/sfx/CREDITS.md). Playback uses `audioplayers` in low-latency mode,
+mixed with other apps' audio. Settings → *Sound effects* mutes them. If audio can't start, the game
+plays silently; sound never stops a fight.
+
 ## Art pipeline (AI drafts)
 
 `tools/asset_gen/` makes first-draft sprites, the stage background, effects and icons with open

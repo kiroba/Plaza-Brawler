@@ -1,7 +1,9 @@
 // Navigation for Arcade and Quick Fight (spec 4.5, 4.10). Real: character select -> how to play (first time)
 // -> [VS splash -> fight] x 12 with continues -> run end -> initials (top 10 only) -> high scores ->
 // feedback -> title; Quick Fight with feedback every third fight. Every step awaits a named route, and a
-// kiosk "return to title" (new session id) or a back press ends the flow cleanly.
+// kiosk "return to title" (new session id) or a back press ends the flow cleanly. A FlowBackdrop route sits
+// under the whole flow, so the title never flashes between steps (VS -> fight -> result -> next VS).
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -36,10 +38,29 @@ class ArcadeFlow {
   static Future<void> _guard(Future<void> Function() f) async {
     if (_busy) return;
     _busy = true;
+    final backdrop = brawlerRoute<void>(
+      Routes.flow,
+      (_) => const FlowBackdrop(),
+    );
+    final nav = navigatorKey.currentState;
+    if (nav != null) unawaited(nav.push(backdrop));
     try {
       await f();
     } finally {
       _busy = false;
+      _dropBackdrop(backdrop);
+    }
+  }
+
+  /// Takes the backdrop away when the flow ends some other way than [_toTitle] (back press, kiosk reset
+  /// already popped everything, a null result).
+  static void _dropBackdrop(Route<void> backdrop) {
+    final nav = navigatorKey.currentState;
+    if (nav == null || !backdrop.isActive) return;
+    if (backdrop.isCurrent) {
+      nav.pop();
+    } else {
+      nav.removeRoute(backdrop);
     }
   }
 

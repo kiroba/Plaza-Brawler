@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 
 import '../art/fighter_painter.dart';
+import '../audio/sfx.dart';
 import '../game/fighter.dart';
 import '../npc/zodiac_offline.dart';
 import '../net/omni_node.dart';
@@ -64,9 +65,11 @@ class CharacterSelectScreen extends StatelessWidget {
                       child: _Tile(
                         def: f,
                         selected: !opponentMode && f.sign == preselected,
-                        onTap: () =>
-                            Navigator.of(context)
-                                .pop(f.source == 'plaza' ? 'plaza' : f.sign),
+                        onTap: () {
+                          sfx.select();
+                          Navigator.of(context)
+                              .pop(f.source == 'plaza' ? 'plaza' : f.sign);
+                        },
                       ),
                     ),
                 ],
