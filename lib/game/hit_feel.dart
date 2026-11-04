@@ -2,9 +2,28 @@
 // stays deterministic. The screen asks [shouldTick] once per 60 Hz display step and only calls
 // engine.tick() when it says yes, so a freeze or slow-mo only delays engine frames; it never changes them
 // (the same intents in the same order give the same match, see test/hit_feel_test.dart).
+import '../audio/sfx.dart';
 import 'match_engine.dart';
 
 class HitFeel {
+  /// The sounds for one engine frame's fx, at most one of each (Flare Rush and traded hits can land twice
+  /// in one frame). A KO plays only the KO sound. Otherwise a landed heavy, special or guard break plays
+  /// the heavy hit (instead of the light one), any other landed hit the light hit, and a blocked hit the
+  /// block thud; a landed hit and a block in the same frame play both. Same split as the hit-stop below.
+  static List<SfxKind> soundsFor(Iterable<HitFx> fx) {
+    if (fx.isEmpty) return const [];
+    if (fx.any((f) => f.ko)) return const [SfxKind.ko];
+    final landed = fx.where((f) => !f.blocked || f.guardBreak);
+    final out = <SfxKind>[];
+    if (landed.any((f) => f.heavy || f.special || f.guardBreak)) {
+      out.add(SfxKind.heavy);
+    } else if (landed.isNotEmpty) {
+      out.add(SfxKind.hit);
+    }
+    if (fx.any((f) => f.blocked && !f.guardBreak)) out.add(SfxKind.block);
+    return out;
+  }
+
   /// Display steps frozen on a landed light hit.
   static const int lightStop = 4;
 

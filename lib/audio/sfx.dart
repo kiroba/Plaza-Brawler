@@ -1,10 +1,11 @@
-// Sound effects: hit, block, KO, menu select. Pure Dart: the playing is done by an [SfxBackend] (the app
+// Sound effects: light hit, heavy hit, block, KO, menu select. Pure Dart: the playing is done by an [SfxBackend] (the app
 // uses AudioplayersBackend in sfx_audioplayers.dart). Real: mute (Settings, saved on this phone by
 // AppState), and sound can never crash the game: every backend call is guarded, a backend that fails to
 // start is switched off for the rest of the session, and play() never throws or waits.
 import 'dart:async';
 
-enum SfxKind { hit, block, ko, select }
+/// [hit] is a landed light hit; [heavy] a landed heavy, special (Flare Rush etc.) or guard break.
+enum SfxKind { hit, heavy, block, ko, select }
 
 /// What actually plays the sounds. Any method may throw; [Sfx] catches everything.
 abstract class SfxBackend {
@@ -16,8 +17,11 @@ abstract class SfxBackend {
 }
 
 class Sfx {
-  /// The asset each sound plays (relative to assets/, as audioplayers' AssetSource expects).
-  static String assetFor(SfxKind k) => 'sfx/${k.name}.wav';
+  /// The asset each sound plays (relative to assets/, as audioplayers' AssetSource expects). The fight
+  /// sounds are Kenney Impact Sounds (CC0, OGG); the menu blip is synthesized (tools/sfx_gen.py, WAV).
+  /// See assets/sfx/CREDITS.md.
+  static String assetFor(SfxKind k) =>
+      k == SfxKind.select ? 'sfx/select.wav' : 'sfx/${k.name}.ogg';
 
   SfxBackend? _backend;
   bool _ready = false;
@@ -74,6 +78,7 @@ class Sfx {
   }
 
   void hit() => play(SfxKind.hit);
+  void heavy() => play(SfxKind.heavy);
   void block() => play(SfxKind.block);
   void ko() => play(SfxKind.ko);
   void select() => play(SfxKind.select);
