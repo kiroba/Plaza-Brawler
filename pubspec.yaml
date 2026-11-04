@@ -15,7 +15,7 @@ dependencies:
   omni_core_ui:
     git:
       url: https://github.com/kiroba/Omni-Core-UI.git
-      ref: feat/ota-resilient-download
+      ref: v0.1.2
   cryptography: ^2.7.0
   crypto: ^3.0.3
   sqflite: ^2.3.0
