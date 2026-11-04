@@ -27,6 +27,11 @@ dependencies:
   wakelock_plus: ">=1.3.3 <1.6.0"
   # Feedback CSV export through the share sheet. Pinned to 11.x: share_plus 12.0.0+ needs AGP >= 8.12.1.
   share_plus: ^11.1.0
+  # Sound effects (lib/audio/sfx_audioplayers.dart). audioplayers_android 5.3.0+ uses the AGP 9 built-in
+  # Kotlin setup and needs Flutter 3.44+, so cap it at the 5.2.x line for this repo's AGP 8.11.1;
+  # audioplayers 6.8+ moves to that line too.
+  audioplayers: ">=6.5.1 <6.8.0"
+  audioplayers_android: ">=5.2.1 <5.3.0"
 
 dev_dependencies:
   flutter_test:
@@ -39,3 +44,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # Synthesized CC0 sound effects; see assets/sfx/CREDITS.md and tools/sfx_gen.py.
+    - assets/sfx/

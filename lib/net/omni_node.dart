@@ -12,11 +12,10 @@
 //     (lib/net/lpe_fighter.dart) and Quick Fight's "Plaza challenger" from /api/lpe/plaza.
 //   - OmniMind opponents (daemon 8.26+): GET :5000/api/v1/omnimind/generate-asset
 //     (lib/net/omnimind_client.dart); offline zodiac fighters when the node doesn't answer.
-//
-// What is NOT wired yet (labelled in the UI, never faked):
-//   - Sharing match results with the node. The hub has no game/match endpoint yet, and
-//     /api/events/append is the shared chain that relays to every peer, so fight events don't
-//     belong there. Summaries stay on this phone (lib/net/match_share.dart) until one exists.
+//   - Match results (daemon 8.28+, opt-in): with "Share my match results" on, each finished match's
+//     MatchShare.payloadFrom summary is POSTed once to :5000/api/games/match (lib/net/match_share.dart);
+//     node-health's "features": ["games_match"] says whether the node has it. Per-hit fight events stay
+//     signed on this phone only (they don't belong on the shared chain).
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:omni_core_ui/omni_core_ui.dart';
 

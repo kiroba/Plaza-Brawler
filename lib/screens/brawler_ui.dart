@@ -1,8 +1,12 @@
 // Shared look for Plaza Brawler's menu screens: colours, a scrolling page that fits 360x640, big buttons,
-// and a route helper that names every route (the kiosk timers read the name). Real, no stubs.
+// and a route helper that names every route (the kiosk timers read the name), the flow backdrop that keeps
+// the title from flashing between Arcade steps, and the menu "select" sound on every BigButton. Real, no stubs.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../audio/sfx.dart';
 
 class BrawlerColors {
   BrawlerColors._();
@@ -25,6 +29,47 @@ Future<T?> pushNamedPage<T>(String name, Widget page) {
   final nav = navigatorKey.currentState;
   if (nav == null) return Future.value(null);
   return nav.push<T>(brawlerRoute<T>(name, (_) => page));
+}
+
+/// Plain dark page that sits under every Arcade / Quick Fight step (route [Routes.flow]), so going from one
+/// step to the next (VS -> fight -> result -> next VS) never shows the title screen in between. A spinner
+/// appears only if the gap lasts (a slow Omni Node opponent lookup).
+class FlowBackdrop extends StatefulWidget {
+  const FlowBackdrop({super.key});
+
+  @override
+  State<FlowBackdrop> createState() => _FlowBackdropState();
+}
+
+class _FlowBackdropState extends State<FlowBackdrop> {
+  Timer? _timer;
+  bool _spinner = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _spinner = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: BrawlerColors.bg,
+      body: Center(
+        child: _spinner
+            ? const CircularProgressIndicator(color: BrawlerColors.cyan)
+            : const SizedBox.shrink(),
+      ),
+    );
+  }
 }
 
 /// Dark page with an optional app bar; the body scrolls and is capped at 480 dp wide.
@@ -118,7 +163,12 @@ class BigButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
           ),
-          onPressed: onPressed,
+          onPressed: onPressed == null
+              ? null
+              : () {
+                  sfx.select();
+                  onPressed!();
+                },
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Row(

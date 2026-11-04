@@ -1,6 +1,7 @@
 // Settings (spec 4.7, 4.8, 5). Kept: Omni Node token entry, connection dot + words, "Check for updates"
 // (OmniOta.checkAndPrompt). Added: real status lines for the LPE fighter, OmniMind opponents and match sharing,
-// the "Share my match results" toggle (default off; nothing is sent until the node has a game endpoint),
+// the "Share my match results" toggle (off by default; enabled once node-health lists "games_match",
+// daemon 8.28.0+, else shown disabled: "turns on when Omni Node supports it"), a "Sound effects" switch,
 // feedback summary + CSV export (share sheet), Reset demo data, and Demo-day mode (set a 4-digit PIN to turn
 // it on; turning it off clears the PIN). The whole screen is hidden while Demo-day mode is on.
 import 'package:flutter/material.dart';
@@ -9,7 +10,6 @@ import 'package:omni_core_ui/omni_core_ui.dart'
 
 import '../app_state.dart';
 import '../game/kiosk.dart';
-import '../net/match_share.dart';
 import '../net/omni_node.dart';
 import 'brawler_ui.dart';
 
@@ -46,6 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await omniNode.checkConnection();
     await omniNode.refreshLpe();
     await omniNode.probeOmniMind();
+    await appState.probeMatchSharing();
     final n = await omniNode.localEventCount();
     final fb = await appState.feedback.summary();
     if (!mounted) return;
@@ -226,20 +227,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
             omniNode.omniMindStatus,
             ok: omniNode.omniMindConnected,
           ),
-          _line('Sharing fights with Omni Node', matchShareStatus),
+          _line(
+            'Sharing fights with Omni Node',
+            appState.matchShare.statusLine(),
+            ok: appState.nodeAcceptsMatchShares && appState.shareEnabled,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'Share my match results',
+              style: TextStyle(
+                color: appState.nodeAcceptsMatchShares
+                    ? Colors.white
+                    : Colors.white54,
+              ),
+            ),
+            subtitle: Text(
+              appState.nodeAcceptsMatchShares
+                  ? 'Off by default. When on, each finished match is sent to Omni Node on this phone.'
+                  : 'Turns on when Omni Node supports it (8.28+). Until then results stay on this phone.',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            // Waiting state: off and disabled until node-health lists games_match.
+            value: appState.nodeAcceptsMatchShares && appState.shareEnabled,
+            onChanged: appState.nodeAcceptsMatchShares
+                ? (v) async {
+                    await appState.setShareEnabled(v);
+                    if (mounted) setState(() {});
+                  }
+                : null,
+          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text(
-              'Share my match results',
+              'Sound effects',
               style: TextStyle(color: Colors.white),
             ),
             subtitle: const Text(
-              'Off by default. Results stay on this phone until Omni Node can receive them.',
+              'Hits, blocks, K.O. and menu clicks.',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
-            value: appState.shareEnabled,
+            value: appState.soundOn,
             onChanged: (v) async {
-              await appState.setShareEnabled(v);
+              await appState.setSoundOn(v);
               if (mounted) setState(() {});
             },
           ),

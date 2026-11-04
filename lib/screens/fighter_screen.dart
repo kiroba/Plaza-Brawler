@@ -2,7 +2,9 @@
 // Ticker. Real: HUD (HP, meter, centred timer, round pips, arcade score), touch pad (d-pad + L/H/B/S, each
 // >= 56 dp) through TouchInput, desktop keys through KeyboardInput, CPU through CpuBrain, signed
 // FIGHTER_MATCH_START / FIGHTER_ROUND_END events and the match summary saved via MatchShare, kiosk pause,
-// and the CPU-vs-CPU attract loop. Placeholder art (lib/art/fighter_painter.dart); no sound yet.
+// and the CPU-vs-CPU attract loop. Placeholder art (lib/art/fighter_painter.dart). Hit-stop and KO slow-mo
+// (lib/game/hit_feel.dart) only decide WHEN the engine ticks, so the engine stays deterministic; the K.O.
+// banner waits for the slow-mo. Sounds (hit / block / KO) play in player fights, not in the attract loop.
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -11,9 +13,11 @@ import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../art/fighter_painter.dart';
+import '../audio/sfx.dart';
 import '../game/arcade.dart';
 import '../game/cpu_brain.dart';
 import '../game/fighter.dart';
+import '../game/hit_feel.dart';
 import '../game/input.dart';
 import '../game/match_engine.dart';
 import '../net/omni_node.dart';
@@ -78,6 +82,7 @@ class _FighterScreenState extends State<FighterScreen>
   bool _ended = false;
   final List<int> _flash = [0, 0];
   int _shakeFrames = 0;
+  final HitFeel _feel = HitFeel();
   final Random _fxRng = Random(7);
   int _attractRound = 0;
 
@@ -150,8 +155,12 @@ class _FighterScreenState extends State<FighterScreen>
     _acc += dt.inMicroseconds;
     var steps = 0;
     while (_acc >= _stepMicros && steps < 5) {
-      _engine.tick();
-      _afterStep();
+      if (_shakeFrames > 0) _shakeFrames--;
+      // Hit-stop / KO slow-mo: some display steps don't run the engine (see HitFeel).
+      if (_feel.shouldTick()) {
+        _engine.tick();
+        _afterStep();
+      }
       _acc -= _stepMicros;
       steps++;
     }
@@ -163,13 +172,14 @@ class _FighterScreenState extends State<FighterScreen>
     for (var s = 0; s < 2; s++) {
       if (_flash[s] > 0) _flash[s]--;
     }
-    if (_shakeFrames > 0) _shakeFrames--;
     for (final fx in _engine.fx) {
       if (fx.defender >= 0 && fx.defender < 2)
         _flash[fx.defender] = fx.blocked ? 3 : 6;
       if (fx.heavy || fx.special || fx.ko || fx.guardBreak)
         _shakeFrames = 7; // ~120 ms
     }
+    _feel.onFx(_engine.fx);
+    if (!_cfg.attract) _playSounds();
     final events = _engine.drainEvents();
     if (!_cfg.attract) {
       for (final e in events) {
@@ -178,7 +188,8 @@ class _FighterScreenState extends State<FighterScreen>
             _cfg.run?.onRound(_engine.results.last);
           omniNode.dispatchEvent(e.type, e.payload);
         } else if (e.type == 'FIGHTER_MATCH_END') {
-          appState.matchShare.shareMatch(e.payload);
+          // Saved on this phone; also POSTed once to Omni Node when sharing is on (lib/net/match_share.dart).
+          appState.matchShare.shareMatch(e.payload, score: _cfg.run?.liveScore);
         } else {
           omniNode.dispatchEvent(e.type, e.payload);
         }
@@ -188,6 +199,18 @@ class _FighterScreenState extends State<FighterScreen>
       _ended = true;
       Future.delayed(const Duration(milliseconds: 1600), _finish);
     }
+  }
+
+  /// At most one of each sound per frame (Flare Rush and traded hits can land twice in one frame).
+  void _playSounds() {
+    final fx = _engine.fx;
+    if (fx.isEmpty) return;
+    if (fx.any((f) => f.ko)) {
+      sfx.ko();
+      return;
+    }
+    if (fx.any((f) => !f.blocked || f.guardBreak)) sfx.hit();
+    if (fx.any((f) => f.blocked && !f.guardBreak)) sfx.block();
   }
 
   void _finish() {
@@ -207,6 +230,7 @@ class _FighterScreenState extends State<FighterScreen>
           difficulty: 0.6,
         );
         _engine = _newEngine(_cfg);
+        _feel.reset();
         _ended = false;
       });
       return;
@@ -279,8 +303,9 @@ class _FighterScreenState extends State<FighterScreen>
                       ),
                     if (_engine.phase == MatchPhase.intro && !_cfg.attract)
                       _Banner(text: 'ROUND ${_engine.round}'),
-                    if (_engine.phase == MatchPhase.roundOver ||
-                        _engine.phase == MatchPhase.matchOver)
+                    if ((_engine.phase == MatchPhase.roundOver ||
+                            _engine.phase == MatchPhase.matchOver) &&
+                        !_feel.holdingKo)
                       _Banner(text: _roundText()),
                     if (_cfg.attract) const _AttractOverlay(),
                     if (_paused) _PauseOverlay(onResume: _resume),

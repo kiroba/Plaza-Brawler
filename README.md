@@ -28,7 +28,8 @@ tag `v0.1.0`.
 | Connection check | **Wired.** `GET :9100/api/v1/telemetry/node-health` on Omni Node on this phone, through `OmniHubClient`. Status dot + words in Settings. |
 | Omni Node token | **Wired.** Settings → paste the token from *Omni Node > Connect apps* (behind the screen lock). Sent as `Authorization: Bearer`. Stored with `flutter_secure_storage`. |
 | Player identity | **Wired.** `StargateIdentity`: an Ed25519 key created on first launch. |
-| Fight events (match start, hits, match end) | **Signed and kept on this phone** (`LocalEventStore`). **Sharing them with Omni Node: not wired yet.** The node has no game endpoint, and its shared event chain is not the place for per-hit events. |
+| Fight events (match start, hits, match end) | **Signed and kept on this phone** (`LocalEventStore`). Per-hit events never leave the phone. |
+| Match results | **Wired, opt-in (Omni Node 8.28+).** Settings → *Share my match results* (off by default) is enabled once `node-health` lists `"features": ["games_match"]`. When it's on, each finished match's `MatchShare.payloadFrom` summary is POSTed once to `:5000/api/games/match` with the same Bearer token (200 = shared, 404 = node too old, anything else = kept on this phone; no retries, because the node doesn't de-duplicate). |
 | Your fighter (Live Persona Engine, LPE) | **Not wired yet.** There is no LPE service; an offline persona is used and labelled in the app. |
 | Your fighter (Live Persona Engine, LPE) | **Needs Omni Node 8.25+.** When the node answers, `GET :5000/api/lpe/profile?pubkey=<your key>` gives your avatar, aura tier and XP, and `GET /api/lpe/plaza` gives a real opponent from the plaza (another known avatar). Read-only, same Bearer token. With an older node, no node, or no LPE profile for your key yet, the offline personas are used and labelled in the app. This app doesn't create LPE profiles yet. |
  main
@@ -36,6 +37,14 @@ tag `v0.1.0`.
 | Updates | Settings → *Check for updates* (`OmniOta.checkAndPrompt`). Plaza Brawler is not in The Omniverse release manifest yet, so there is nothing to update to until it is. |
 
 Network: cleartext HTTP is allowed to `127.0.0.1` / `localhost` only (`network_security_config.xml`).
+
+## Sound
+
+Hit, block, K.O. and menu-select sounds are in `assets/sfx/`. They are synthesized by
+`tools/sfx_gen.py` (standard library only) and released as CC0; see
+[assets/sfx/CREDITS.md](assets/sfx/CREDITS.md). Playback uses `audioplayers` in low-latency mode,
+mixed with other apps' audio. Settings → *Sound effects* mutes them. If audio can't start, the game
+plays silently; sound never stops a fight.
 
 ## Art pipeline (AI drafts)
 
