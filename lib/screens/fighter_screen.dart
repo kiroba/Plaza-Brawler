@@ -201,16 +201,11 @@ class _FighterScreenState extends State<FighterScreen>
     }
   }
 
-  /// At most one of each sound per frame (Flare Rush and traded hits can land twice in one frame).
+  /// At most one of each sound per frame; light / heavy / block / KO split in HitFeel.soundsFor.
   void _playSounds() {
-    final fx = _engine.fx;
-    if (fx.isEmpty) return;
-    if (fx.any((f) => f.ko)) {
-      sfx.ko();
-      return;
+    for (final k in HitFeel.soundsFor(_engine.fx)) {
+      sfx.play(k);
     }
-    if (fx.any((f) => !f.blocked || f.guardBreak)) sfx.hit();
-    if (fx.any((f) => f.blocked && !f.guardBreak)) sfx.block();
   }
 
   void _finish() {

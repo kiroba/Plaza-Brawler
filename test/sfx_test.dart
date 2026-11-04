@@ -1,5 +1,7 @@
 // Sound effects wrapper (lib/audio/sfx.dart): mute, and sound never crashes the game. Pure Dart.
 import 'package:plaza_brawler/audio/sfx.dart';
+import 'package:plaza_brawler/game/hit_feel.dart';
+import 'package:plaza_brawler/game/match_engine.dart';
 import 'package:test/test.dart';
 
 class _Fake implements SfxBackend {
@@ -25,24 +27,27 @@ class _Fake implements SfxBackend {
 }
 
 void main() {
-  test('loads all four sounds from assets/sfx and plays them', () async {
+  test('loads all five sounds from assets/sfx and plays them', () async {
     final b = _Fake();
     final s = Sfx();
     await s.init(() => b);
     expect(s.available, isTrue);
     expect(b.loaded, [
-      'sfx/hit.wav',
-      'sfx/block.wav',
-      'sfx/ko.wav',
+      'sfx/hit.ogg',
+      'sfx/heavy.ogg',
+      'sfx/block.ogg',
+      'sfx/ko.ogg',
       'sfx/select.wav',
     ]);
     s
       ..hit()
+      ..heavy()
       ..block()
       ..ko()
       ..select();
     expect(b.playedKinds, [
       SfxKind.hit,
+      SfxKind.heavy,
       SfxKind.block,
       SfxKind.ko,
       SfxKind.select,
@@ -100,9 +105,80 @@ void main() {
     },
   );
 
-  test('asset paths are assets/sfx/<name>.wav (as listed in pubspec.yaml)', () {
-    for (final k in SfxKind.values) {
-      expect(Sfx.assetFor(k), 'sfx/${k.name}.wav');
-    }
+  test(
+    'asset paths: Kenney OGGs for fight sounds, synth WAV for menu select',
+    () {
+      for (final k in SfxKind.values) {
+        expect(
+          Sfx.assetFor(k),
+          k == SfxKind.select ? 'sfx/select.wav' : 'sfx/${k.name}.ogg',
+        );
+      }
+    },
+  );
+
+  group('HitFeel.soundsFor (which cue a frame plays)', () {
+    HitFx fx({
+      bool blocked = false,
+      bool heavy = false,
+      bool special = false,
+      bool guardBreak = false,
+      bool ko = false,
+    }) => HitFx(
+      defender: 1,
+      blocked: blocked,
+      heavy: heavy,
+      special: special,
+      guardBreak: guardBreak,
+      ko: ko,
+    );
+
+    test('nothing happened: no sound', () {
+      expect(HitFeel.soundsFor(const []), isEmpty);
+    });
+
+    test('landed light hit: light hit sound', () {
+      expect(HitFeel.soundsFor([fx()]), [SfxKind.hit]);
+    });
+
+    test('landed heavy, special (Flare Rush) and guard break: heavy sound', () {
+      expect(HitFeel.soundsFor([fx(heavy: true)]), [SfxKind.heavy]);
+      expect(HitFeel.soundsFor([fx(special: true)]), [SfxKind.heavy]);
+      expect(HitFeel.soundsFor([fx(blocked: true, guardBreak: true)]), [
+        SfxKind.heavy,
+      ]);
+    });
+
+    test('blocked hit (heavy or light): block sound only', () {
+      expect(HitFeel.soundsFor([fx(blocked: true)]), [SfxKind.block]);
+      expect(HitFeel.soundsFor([fx(blocked: true, heavy: true)]), [
+        SfxKind.block,
+      ]);
+      expect(HitFeel.soundsFor([fx(blocked: true, special: true)]), [
+        SfxKind.block,
+      ]);
+    });
+
+    test('at most one of each per frame; heavy wins over light', () {
+      // Flare Rush landing twice in one frame.
+      expect(HitFeel.soundsFor([fx(special: true), fx(special: true)]), [
+        SfxKind.heavy,
+      ]);
+      expect(HitFeel.soundsFor([fx(), fx(heavy: true)]), [SfxKind.heavy]);
+      expect(HitFeel.soundsFor([fx(), fx()]), [SfxKind.hit]);
+      // Traded hits: one landed, one blocked.
+      expect(HitFeel.soundsFor([fx(), fx(blocked: true)]), [
+        SfxKind.hit,
+        SfxKind.block,
+      ]);
+    });
+
+    test('KO plays only the KO sound', () {
+      expect(
+        HitFeel.soundsFor([fx(heavy: true, ko: true), fx(blocked: true)]),
+        [SfxKind.ko],
+      );
+      expect(HitFeel.soundsFor([fx(ko: true)]), [SfxKind.ko]);
+    });
   });
 }

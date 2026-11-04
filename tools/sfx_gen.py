@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Synthesizes Plaza Brawler's sound effects into assets/sfx/*.wav (16-bit mono, 22050 Hz).
+"""Synthesizes Plaza Brawler's menu-select blip into assets/sfx/select.wav (16-bit mono, 22050 Hz).
 
-Standard library only, fixed random seed, so running it again gives byte-identical files. The sounds are
+The fight sounds (hit, heavy, block, KO) are recorded CC0 samples from Kenney's Impact Sounds pack, not
+made here; see assets/sfx/CREDITS.md.
+
+Standard library only and deterministic, so running it again gives a byte-identical file. The blip is
 original (made by this script, no samples), released as CC0 1.0; see assets/sfx/CREDITS.md.
 
     python3 tools/sfx_gen.py
 """
 import math
 import os
-import random
 import struct
 import wave
 
@@ -37,47 +39,6 @@ def write(name, samples, gain=0.9):
     print(f"{path}: {len(samples) / RATE * 1000:.0f} ms, {len(data) + 44} bytes")
 
 
-def hit():
-    """Punchy thump: a falling sine (160 -> 55 Hz) under a short low-passed noise burst."""
-    rng = random.Random(1)
-    n = int(RATE * 0.12)
-    out, lp, ph = [], 0.0, 0.0
-    for i in range(n):
-        f = 55 + 105 * (1 - i / n) ** 3
-        ph += 2 * math.pi * f / RATE
-        lp += 0.35 * (rng.uniform(-1, 1) - lp)
-        noise = lp * (1 - i / n) ** 6
-        out.append(math.sin(ph) * env(i, n, 0.002, 2.2) + 0.8 * noise)
-    return out
-
-
-def block():
-    """Hard 'clack': two short square-ish partials (1.2 kHz, 1.9 kHz) with a quick decay."""
-    n = int(RATE * 0.07)
-    out = []
-    for i in range(n):
-        t = i / RATE
-        s = math.copysign(1, math.sin(2 * math.pi * 1200 * t)) * 0.4 + math.sin(2 * math.pi * 1900 * t) * 0.6
-        out.append(s * env(i, n, 0.001, 4.0))
-    return out
-
-
-def ko():
-    """Low boom plus a falling tone (440 -> 110 Hz) over ~0.7 s."""
-    rng = random.Random(2)
-    n = int(RATE * 0.7)
-    out, lp, ph = [], 0.0, 0.0
-    for i in range(n):
-        x = i / n
-        f = 110 + 330 * (1 - x) ** 2
-        ph += 2 * math.pi * f / RATE
-        lp += 0.08 * (rng.uniform(-1, 1) - lp)
-        tone = (math.sin(ph) + 0.3 * math.sin(2 * ph)) * env(i, n, 0.005, 1.4)
-        boom = lp * 4 * (1 - x) ** 8
-        out.append(tone + boom)
-    return out
-
-
 def select():
     """Short two-step blip (880 Hz then 1320 Hz)."""
     n = int(RATE * 0.08)
@@ -91,7 +52,4 @@ def select():
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    write("hit.wav", hit())
-    write("block.wav", block(), gain=0.6)
-    write("ko.wav", ko())
     write("select.wav", select(), gain=0.5)

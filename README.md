@@ -40,8 +40,9 @@ Network: cleartext HTTP is allowed to `127.0.0.1` / `localhost` only (`network_s
 
 ## Sound
 
-Hit, block, K.O. and menu-select sounds are in `assets/sfx/`. They are synthesized by
-`tools/sfx_gen.py` (standard library only) and released as CC0; see
+Sounds are in `assets/sfx/`. Light hit, heavy hit (heavies, specials and guard breaks), block and
+K.O. are from Kenney's [Impact Sounds](https://kenney.nl/assets/impact-sounds) pack (CC0); the
+menu-select blip is synthesized by `tools/sfx_gen.py` (CC0). See
 [assets/sfx/CREDITS.md](assets/sfx/CREDITS.md). Playback uses `audioplayers` in low-latency mode,
 mixed with other apps' audio. Settings → *Sound effects* mutes them. If audio can't start, the game
 plays silently; sound never stops a fight.
