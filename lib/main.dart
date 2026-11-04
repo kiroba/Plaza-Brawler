@@ -1,12 +1,19 @@
 // Plaza Brawler entry: Boot -> Title. The app's navigator key and route observer drive the kiosk timers,
 // and every pointer-down anywhere counts as activity for them (lib/app_state.dart).
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_state.dart';
 import 'screens/boot_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Landscape only, for every screen (the manifest also starts the activity in landscape), so the phone
+  // no longer turns between the VS card and each fight.
+  SystemChrome.setPreferredOrientations(const [
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
   runApp(const PlazaBrawlerApp());
 }
 
