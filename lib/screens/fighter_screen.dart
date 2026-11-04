@@ -90,10 +90,6 @@ class _FighterScreenState extends State<FighterScreen>
   void initState() {
     super.initState();
     _cfg = widget.config;
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
     _touch.onActivity = appState.kiosk.noteActivity;
     _engine = _newEngine(_cfg);
     if (!_cfg.attract) appState.onPauseFight = _pauseFromKiosk;
@@ -105,7 +101,6 @@ class _FighterScreenState extends State<FighterScreen>
     _ticker.dispose();
     _focus.dispose();
     if (appState.onPauseFight == _pauseFromKiosk) appState.onPauseFight = null;
-    SystemChrome.setPreferredOrientations(const []);
     super.dispose();
   }
 
