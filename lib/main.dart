@@ -2,8 +2,10 @@
 // and every pointer-down anywhere counts as activity for them (lib/app_state.dart).
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omni_core_ui/omni_core_ui.dart' show OmniOta;
 
 import 'app_state.dart';
+import 'net/omni_node.dart' show omniNode;
 import 'screens/boot_screen.dart';
 
 void main() {
@@ -14,6 +16,8 @@ void main() {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
+  // Updates: ask the Omni Node on this phone first, with the token saved in Settings (loaded at boot).
+  OmniOta.localTokenProvider = () => omniNode.otaToken;
   runApp(const PlazaBrawlerApp());
 }
 

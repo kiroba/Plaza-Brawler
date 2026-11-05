@@ -47,6 +47,10 @@ class OmniNodeClient {
   /// The Omni Node token pasted in Settings (empty = none yet).
   String get token => _token;
 
+  /// For OmniOta (Omni-Core-UI 0.1.3 asks this phone's Omni Node for updates first): the saved
+  /// token, or null when none is saved yet (updates then come from GitHub).
+  String? get otaToken => _token.isEmpty ? null : _token;
+
   /// Result of the last [checkConnection], or null before the first check.
   HubConnection? get lastConnection => _last;
 
