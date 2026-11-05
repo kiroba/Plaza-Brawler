@@ -108,7 +108,7 @@ class KioskRouteObserver extends NavigatorObserver {
 }
 
 class AppState extends ChangeNotifier {
-  static const appVersion = '5.4.0';
+  static const appVersion = '5.5.0';
 
   static const FlutterSecureStorage _store = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),

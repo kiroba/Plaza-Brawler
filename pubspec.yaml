@@ -1,7 +1,7 @@
 name: plaza_brawler
 description: "Plaza Brawler: a 2D fighter mini-game for The Omniverse"
 publish_to: 'none'
-version: 5.4.0+540
+version: 5.5.0+550
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
