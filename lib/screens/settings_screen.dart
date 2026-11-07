@@ -337,7 +337,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
       const     Text(
             'Plaza Brawler ${AppState.appVersion}',
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
+            style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ],
       ),

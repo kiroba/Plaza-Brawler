@@ -79,7 +79,7 @@ class ArenaPainter extends CustomPainter {
     );
   const groundY = MatchEngine.arenaHeight * _groundFrac;
     canvas.drawRect(
-      Rect.fromLTWH(
+      const Rect.fromLTWH(
         0,
         groundY,
         MatchEngine.arenaWidth,
@@ -88,8 +88,8 @@ class ArenaPainter extends CustomPainter {
       Paint()..color = const Color(0xFF1E293B),
     );
     canvas.drawLine(
-      Offset(0, groundY),
-      Offset(MatchEngine.arenaWidth, groundY),
+      const Offset(0, groundY),
+      const Offset(MatchEngine.arenaWidth, groundY),
       Paint()
         ..color = const Color(0xFF00E5FF)
         ..strokeWidth = 2,
