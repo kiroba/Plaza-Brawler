@@ -115,8 +115,9 @@ class ArcadeRun {
 
   /// Use a continue: refight the same opponent. False when none are left.
   bool useContinue() {
-    if (status != RunStatus.lostAwaitingContinue || continuesLeft <= 0)
+    if (status != RunStatus.lostAwaitingContinue || continuesLeft <= 0) {
       return false;
+  }
     continuesLeft--;
     fightPoints = 0;
     status = RunStatus.fighting;

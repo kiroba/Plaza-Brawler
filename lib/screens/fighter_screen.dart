@@ -168,10 +168,12 @@ class _FighterScreenState extends State<FighterScreen>
       if (_flash[s] > 0) _flash[s]--;
     }
     for (final fx in _engine.fx) {
-      if (fx.defender >= 0 && fx.defender < 2)
+      if (fx.defender >= 0 && fx.defender < 2) {
         _flash[fx.defender] = fx.blocked ? 3 : 6;
-      if (fx.heavy || fx.special || fx.ko || fx.guardBreak)
+    }
+      if (fx.heavy || fx.special || fx.ko || fx.guardBreak) {
         _shakeFrames = 7; // ~120 ms
+    }
     }
     _feel.onFx(_engine.fx);
     if (!_cfg.attract) _playSounds();
@@ -179,8 +181,9 @@ class _FighterScreenState extends State<FighterScreen>
     if (!_cfg.attract) {
       for (final e in events) {
         if (e.type == 'FIGHTER_ROUND_END') {
-          if (_engine.results.isNotEmpty)
+          if (_engine.results.isNotEmpty) {
             _cfg.run?.onRound(_engine.results.last);
+        }
           omniNode.dispatchEvent(e.type, e.payload);
         } else if (e.type == 'FIGHTER_MATCH_END') {
           // Saved on this phone; also POSTed once to Omni Node when sharing is on (lib/net/match_share.dart).
@@ -326,8 +329,9 @@ class _FighterScreenState extends State<FighterScreen>
     if (_engine.phase == MatchPhase.matchOver || _engine.isOver) {
       final w = _engine.matchWinner;
       if (w == null) return 'DRAW';
-      if (_cfg.attract)
+      if (_cfg.attract) {
         return '${_engine.fighter(w).def.name.toUpperCase()} WINS';
+    }
       return w == 0 ? 'YOU WIN!' : 'YOU LOSE';
     }
     final r = _engine.results.isEmpty ? null : _engine.results.last;

@@ -228,8 +228,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> setShareEnabled(bool on) async {
-    if (on && !nodeAcceptsMatchShares)
+    if (on && !nodeAcceptsMatchShares) {
       return; // can't turn on until the node supports it
+  }
     matchShare.shareEnabled = on;
     await _write(_kShare, on ? '1' : '0');
     notifyListeners();

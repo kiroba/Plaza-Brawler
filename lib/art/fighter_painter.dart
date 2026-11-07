@@ -44,7 +44,7 @@ class ArenaPainter extends CustomPainter {
     );
     canvas.scale(scale);
     _background(canvas);
-    final groundY = MatchEngine.arenaHeight * _groundFrac;
+  const groundY = MatchEngine.arenaHeight * _groundFrac;
     for (final p in engine.projectiles) {
       final paint = Paint()
         ..color = const Color(0xFF4CC9F0)
@@ -77,7 +77,7 @@ class ArenaPainter extends CustomPainter {
           colors: [Color(0xFF151A2E), Color(0xFF2A1F3D)],
         ).createShader(r),
     );
-    final groundY = MatchEngine.arenaHeight * _groundFrac;
+  const groundY = MatchEngine.arenaHeight * _groundFrac;
     canvas.drawRect(
       Rect.fromLTWH(
         0,
