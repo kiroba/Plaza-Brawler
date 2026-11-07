@@ -1,0 +1,27 @@
+name: Verify
+
+# Pipeline Fix #1 (source of truth, Section 6.2 / Gap 1):
+# CI must run the verification protocol — flutter analyze + flutter test —
+# not only build the APK. This workflow is separate from build.yml so the
+# build of record is untouched; a red verify check means do not merge.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze (zero errors/warnings per the verification protocol)
+        run: flutter analyze
+      - name: Test
+        run: flutter test
