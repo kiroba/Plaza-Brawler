@@ -17,8 +17,9 @@ class OmniMindOpponents {
   List<FighterDef> attractPair(int seed) {
     final a = zodiacSigns[seed.abs() % zodiacSigns.length];
     var b = zodiacSigns[(seed.abs() ~/ 12 + 5) % zodiacSigns.length];
-    if (b == a)
+    if (b == a) {
       b = zodiacSigns[(zodiacSigns.indexOf(a) + 6) % zodiacSigns.length];
+  }
     return [offlineFighter(a)!, offlineFighter(b)!];
   }
 

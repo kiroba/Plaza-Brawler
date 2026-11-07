@@ -271,8 +271,9 @@ class MatchEngine {
     if (f.isAttacking ||
         f.action == FighterAction.hitstun ||
         f.isKo ||
-        !f.grounded)
+        !f.grounded) {
       return;
+  }
     if (f.x != o.x) f.facingRight = o.x > f.x;
   }
 
@@ -569,8 +570,9 @@ class MatchEngine {
     // The multi-hit fix: one hit per move use, except Flare Rush (3 hits, hitSpacing frames apart).
     if (a.moveHits >= m.maxHits) return const [];
     const spacing = Specials.flareRushHitSpacing;
-    if (m.maxHits > 1 && a.actionFrames - a.lastHitFrame < spacing)
+    if (m.maxHits > 1 && a.actionFrames - a.lastHitFrame < spacing) {
       return const [];
+  }
     // Once a multi-hit move connects, its follow-ups keep their cadence even past the active frames, so a
     // Flare Rush that makes contact late in its dash still lands all 3 hits.
     final followUp =

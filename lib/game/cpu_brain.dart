@@ -152,13 +152,15 @@ class CpuBrain {
                   : Moves.specialStartup + Moves.specialActive);
       if (whiffed && seen && !_punishTried && dist <= Moves.heavy.range) {
         _punishTried = true;
-        if (_rng.nextDouble() < 0.45 + 0.45 * difficulty)
+        if (_rng.nextDouble() < 0.45 + 0.45 * difficulty) {
           press = FighterIntent.heavy;
+      }
       }
       // Anti-air: opponent jumping in.
       if (press == 0 && !opp.grounded && dist < 110 && opp.vy < 2) {
-        if (_rng.nextDouble() < 0.02 + 0.10 * difficulty)
+        if (_rng.nextDouble() < 0.02 + 0.10 * difficulty) {
           press = FighterIntent.heavy;
+      }
       }
       // Special at full meter when in its range.
       if (press == 0 && me.meter >= Moves.meterMax) {
@@ -166,8 +168,9 @@ class CpuBrain {
             ? Specials.all[me.specialCursor % Specials.all.length].id
             : def.specialId;
         if (dist <= _specialRange(id) &&
-            _rng.nextDouble() < 0.04 + 0.10 * difficulty)
+            _rng.nextDouble() < 0.04 + 0.10 * difficulty) {
           press = FighterIntent.special;
+      }
       }
       // A fresh plan every reaction window.
       if (frame >= _nextDecision) {
@@ -180,8 +183,9 @@ class CpuBrain {
       }
       if (_approach) bits |= toward;
       if (_retreat) bits |= away;
-      if (_moveDir != 0)
+      if (_moveDir != 0) {
         bits |= (_moveDir > 0 ? FighterIntent.right : FighterIntent.left);
+    }
     }
 
     // Buttons must be released for a tick between presses (the engine reads rising edges).

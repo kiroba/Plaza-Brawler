@@ -91,9 +91,10 @@ class OmniMindClient {
     final m = await generateNpc(sign, seed);
     final f = m == null ? null : fighterFromManifest(m);
     if (f != null) return f;
-    if (m != null)
+    if (m != null) {
       lastOk =
           false; // a manifest we couldn't use is not "generating opponents"
+  }
     return offlineFighter(sign);
   }
 

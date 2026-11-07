@@ -40,8 +40,9 @@ class _TitleScreenState extends State<TitleScreen> {
   void dispose() {
     _holdTimer?.cancel();
     appState.removeListener(_changed);
-    if (appState.onStartAttract == _startAttract)
+    if (appState.onStartAttract == _startAttract) {
       appState.onStartAttract = null;
+  }
     super.dispose();
   }
 
