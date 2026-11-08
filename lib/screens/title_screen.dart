@@ -55,19 +55,28 @@ class _TitleScreenState extends State<TitleScreen> {
     _attractOpen = true;
     _attractCount++;
     final seed = DateTime.now().millisecondsSinceEpoch ^ _attractCount;
-    final pair = omniMindOpponents.attractPair(seed);
-    await pushNamedPage<FightOutcome>(
-      Routes.attract,
-      FighterScreen(
-        config: FightConfig(
-          p1: pair[0],
-          p2: pair[1],
-          seed: seed & 0x7fffffff,
-          mode: 'attract',
-          difficulty: 0.6,
+    try {
+      final pair = omniMindOpponents.attractPair(seed);
+      await pushNamedPage<FightOutcome>(
+        Routes.attract,
+        FighterScreen(
+          config: FightConfig(
+            p1: pair[0],
+            p2: pair[1],
+            seed: seed & 0x7fffffff,
+            mode: 'attract',
+            difficulty: 0.6,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      // One failed start (bad pair, dead navigator) must not latch the
+      // attract loop shut for the whole session: the reset below re-arms
+      // the idle timer and the loop tries again after the next quiet 20 s.
+      _attractOpen = false;
+      appState.kiosk.resetSession();
+      return;
+    }
     _attractOpen = false;
     // A tap ended the loop: a new player is here.
     appState.kiosk.resetSession();
