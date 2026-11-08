@@ -78,12 +78,15 @@ class _TitleScreenState extends State<TitleScreen> {
     if (!appState.kioskOn) return;
     appState.kiosk.logoDown();
     _holdTimer?.cancel();
-    _holdTimer = Timer(
-      const Duration(milliseconds: KioskController.exitHoldMs),
-      () {
-        if (appState.kiosk.logoHeld()) _askPin();
-      },
-    );
+    // Poll while the finger is down instead of one shot at exactly 3 s: a
+    // one-shot timer can fire a millisecond early, fail the >= 3 s check in
+    // logoHeld(), and never ask again while the operator keeps holding.
+    _holdTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (appState.kiosk.logoHeld()) {
+        _holdTimer?.cancel();
+        _askPin();
+      }
+    });
   }
 
   void _logoUp() {
@@ -211,7 +214,7 @@ class _TitleScreenState extends State<TitleScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 10),
                 child: Text(
-                  'Demo-day mode',
+                  'Demo-day mode · hold the logo to exit',
                   style: TextStyle(color: Colors.white24, fontSize: 11),
                 ),
               ),
