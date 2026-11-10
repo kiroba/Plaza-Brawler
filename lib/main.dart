@@ -2,14 +2,19 @@
 // and every pointer-down anywhere counts as activity for them (lib/app_state.dart).
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omni_core_ui/omni_core_ui.dart' show OmniOta;
+import 'package:omni_core_ui/omni_core_ui.dart'
+    show OmniOta, StargateIdentity;
 
 import 'app_state.dart';
+import 'net/brawler_seed_store.dart';
 import 'net/omni_node.dart' show omniNode;
 import 'screens/boot_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // One person, one key: share the identity seed with the LPE app (same
+  // secure-storage key), so the Halo saved in LPE is the fighter here.
+  StargateIdentity.seedStore = BrawlerSeedStore();
   // Landscape only, for every screen (the manifest also starts the activity in landscape), so the phone
   // no longer turns between the VS card and each fight.
   SystemChrome.setPreferredOrientations(const [
