@@ -21,6 +21,8 @@ import 'package:omni_core_ui/omni_core_ui.dart';
 
 import '../game/fighter.dart';
 import '../npc/zodiac_offline.dart';
+import 'brawler_seed_store.dart';
+import 'identity_transfer.dart';
 import 'lpe_client.dart';
 import 'lpe_fighter.dart';
 import 'omnimind_client.dart';
@@ -101,6 +103,26 @@ class OmniNodeClient {
       _identity ??= await StargateIdentity.load();
     } catch (_) {}
     return _identity;
+  }
+
+  /// Imports an identity transfer code (from LPE, the identity home): the
+  /// seed is verified, replaces this app's seed in its secure store, and is
+  /// adopted for this session, so the player key becomes the Halo's key.
+  /// Returns a plain-words result for Settings to show; null code damage and
+  /// storage failures are reported, never thrown.
+  Future<String> importIdentity(String code) async {
+    final seed = seedFromIdentityTransferCode(code);
+    if (seed == null) {
+      return 'That code does not check out - copy it again from LPE, complete and unchanged.';
+    }
+    try {
+      await BrawlerSeedStore().write(seed);
+      _identity = await StargateIdentity.fromSeed(seed);
+      await refreshLpe();
+      return 'Identity imported. This app now acts as ${_identity!.shortId} - restart the app to use it everywhere.';
+    } catch (_) {
+      return 'The code is valid but saving it failed on this phone.';
+    }
   }
 
   /// Real health check against node-health on :9100. Never throws.

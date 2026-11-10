@@ -24,6 +24,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _tokenController = TextEditingController(
     text: omniNode.token,
   );
+  final TextEditingController _transferController = TextEditingController();
+  String? _transferResult;
   bool _saved = false;
   bool _checking = false;
   int _localEvents = 0;
@@ -38,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _tokenController.dispose();
+    _transferController.dispose();
     super.dispose();
   }
 
@@ -153,6 +156,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Omni Node on this phone (127.0.0.1)',
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
+          const SizedBox(height: 20),
+          const Text(
+            'Identity transfer',
+            style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _transferController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: BrawlerColors.panel,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              hintText: 'Paste the transfer code from LPE',
+              hintStyle: const TextStyle(color: Colors.white38),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'In LPE (your identity home) tap "Copy identity transfer code", then paste it here. This app then acts as that identity - your fighter becomes the Halo saved in LPE. It replaces the key this app created for itself.',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          BigButton(
+            'IMPORT IDENTITY',
+            onPressed: () async {
+              final msg =
+                  await omniNode.importIdentity(_transferController.text);
+              if (!mounted) return;
+              setState(() {
+                _transferResult = msg;
+                if (msg.startsWith('Identity imported')) {
+                  _transferController.clear();
+                }
+              });
+              await _refresh();
+            },
+          ),
+          if (_transferResult != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _transferResult!,
+                style: TextStyle(
+                  color: _transferResult!.startsWith('Identity imported')
+                      ? Colors.greenAccent
+                      : Colors.orangeAccent,
+                ),
+              ),
+            ),
           const SizedBox(height: 20),
           const Text(
             'Omni Node token',
