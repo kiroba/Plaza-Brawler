@@ -33,6 +33,24 @@ android {
     //    OMNI_REQUIRE_RELEASE_KEY=1 makes a missing keystore a hard build failure.
     //  - CI/test builds: the shared test key signing/omniverse-test.p12.
     //  - Local builds without the env var fall back to the debug key.
+    // Without OMNI_KEYSTORE, CI/test builds fall back to the shared test key
+    // committed at signing/omniverse-test.p12.b64 (base64 so it travels as
+    // text; the shared test key itself is public by design — see
+    // signing/README.md). Ported from LPE PR #4 (Nov 10, 2026): before this
+    // fallback existed, the Brawler's CI builds used the runner's throwaway
+    // debug key, whose signature changed between builds and made Android
+    // refuse updates ("package conflicts with an existing package"). The
+    // decoded file lands in the build dir only; the private release key
+    // always wins when OMNI_KEYSTORE is set, and this key must never sign a
+    // public release.
+    def omniTestKeyFile = null
+    def omniTestKeyB64 = new File(rootProject.projectDir, "../signing/omniverse-test.p12.b64")
+    if (System.getenv("OMNI_KEYSTORE") == null && omniTestKeyB64.exists()) {
+        omniTestKeyFile = new File(buildDir, "omniverse-test.p12")
+        omniTestKeyFile.parentFile.mkdirs()
+        omniTestKeyFile.bytes = java.util.Base64.getDecoder().decode(
+            omniTestKeyB64.getText("UTF-8").replaceAll("\\s", ""))
+    }
     signingConfigs {
         release {
             def ks = System.getenv("OMNI_KEYSTORE")
@@ -42,6 +60,12 @@ android {
                 storePassword System.getenv("OMNI_KEYSTORE_PASSWORD")
                 keyAlias System.getenv("OMNI_KEY_ALIAS")
                 keyPassword System.getenv("OMNI_KEY_PASSWORD")
+            } else if (omniTestKeyFile != null) {
+                storeFile omniTestKeyFile
+                storeType "pkcs12"
+                storePassword "omniverse-test"
+                keyAlias "omniverse"
+                keyPassword "omniverse-test"
             } else if (System.getenv("OMNI_REQUIRE_RELEASE_KEY") == "1") {
                 throw new GradleException("OMNI_REQUIRE_RELEASE_KEY=1 but the release keystore is missing (OMNI_KEYSTORE=" + ks + "). Refusing to fall back to the debug key.")
             }
@@ -51,7 +75,7 @@ android {
     buildTypes {
         release {
             def ks = System.getenv("OMNI_KEYSTORE")
-            signingConfig ((ks != null && new File(ks).exists()) ? signingConfigs.release : signingConfigs.debug)
+            signingConfig (((ks != null && new File(ks).exists()) || omniTestKeyFile != null) ? signingConfigs.release : signingConfigs.debug)
         }
     }
 }
