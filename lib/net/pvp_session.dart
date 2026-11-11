@@ -95,7 +95,8 @@ bool _isIpv4(String s) {
 /// use, dropping malformed frames instead of throwing.
 Stream<PvpMessage> _incoming(WebSocket socket) => socket
     .map((event) => event is String ? PvpMessage.tryDecode(event) : null)
-    .whereType<PvpMessage>()
+    .where((message) => message != null)
+    .cast<PvpMessage>()
     .asBroadcastStream();
 
 /// The pairing payload the host shows as a QR code (spec §3.2):
@@ -301,10 +302,11 @@ class PvpSession {
 
   Future<void> sendAbort(String reason) async {
     try {
+      // No flush: WebSocket has none — add() queues the frame and close()
+      // sends it before tearing the socket down.
       _socket.add(
         PvpMessage(PvpMessage.abort, sessionId, {'reason': reason}).encode(),
       );
-      await _socket.flush();
     } catch (_) {}
   }
 

@@ -133,14 +133,14 @@ void main() {
       guestSign = (bytes) => _sign(guestKey.pair, bytes);
     });
 
-    Future<PvpHost> _host() => PvpHost.create(
+    Future<PvpHost> newHost() => PvpHost.create(
           pubkeyHex: hostPub,
           sign: hostSign,
           bindAddress: InternetAddress.loopbackIPv4,
         );
 
     test('pinned QR connect reaches ready on both sides', () async {
-      final host = await _host();
+      final host = await newHost();
       addTearDown(host.close);
       final hostFuture = host.waitForGuest(
         timeout: const Duration(seconds: 10),
@@ -163,7 +163,7 @@ void main() {
     });
 
     test('manual code connect reaches ready', () async {
-      final host = await _host();
+      final host = await newHost();
       addTearDown(host.close);
       final hostFuture = host.waitForGuest(
         timeout: const Duration(seconds: 10),
@@ -183,7 +183,7 @@ void main() {
     });
 
     test('wrong session code aborts', () async {
-      final host = await _host();
+      final host = await newHost();
       addTearDown(host.close);
       final hostFuture = host.waitForGuest(
         timeout: const Duration(seconds: 10),
@@ -201,7 +201,7 @@ void main() {
     });
 
     test('tampered pinned host key aborts', () async {
-      final host = await _host();
+      final host = await newHost();
       addTearDown(host.close);
       final hostFuture = host.waitForGuest(
         timeout: const Duration(seconds: 10),
@@ -227,7 +227,7 @@ void main() {
     });
 
     test('guest abort after ready reaches the host cleanly', () async {
-      final host = await _host();
+      final host = await newHost();
       addTearDown(host.close);
       final hostFuture = host.waitForGuest(
         timeout: const Duration(seconds: 10),
