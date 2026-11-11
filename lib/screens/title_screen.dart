@@ -13,6 +13,7 @@ import '../npc/omnimind.dart';
 import 'arcade_flow.dart';
 import 'brawler_ui.dart';
 import 'fighter_screen.dart';
+import 'pvp_lobby_screen.dart';
 import 'high_scores_screen.dart';
 import 'how_to_play_screen.dart';
 import 'settings_screen.dart';
@@ -189,6 +190,17 @@ class _TitleScreenState extends State<TitleScreen> {
               color: BrawlerColors.gold,
               onPressed: () => ArcadeFlow.startQuickFight(),
             ),
+            if (!kiosk)
+              BigButton(
+                'PLAY TOGETHER',
+                icon: Icons.people,
+                color: BrawlerColors.panel,
+                textColor: Colors.white,
+                onPressed: () => pushNamedPage<void>(
+                  Routes.pvp,
+                  const PvpLobbyScreen(),
+                ),
+              ),
             BigButton(
               'HIGH SCORES',
               icon: Icons.leaderboard,

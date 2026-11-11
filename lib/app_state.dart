@@ -38,6 +38,7 @@ class Routes {
   static const feedback = 'feedback';
   static const dialog = 'dialog';
   static const settings = 'settings';
+  static const pvp = 'pvp';
 
   /// Plain dark page under every Arcade / Quick Fight step (screens/brawler_ui.dart FlowBackdrop).
   static const flow = 'flow';
@@ -61,6 +62,7 @@ class Routes {
       case feedback:
       case dialog:
       case flow:
+      case pvp:
         return KioskScreen.menu;
       default:
         return KioskScreen.other;
