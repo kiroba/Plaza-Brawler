@@ -7,7 +7,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
-import '../game/kiosk.dart';
 import '../net/omni_node.dart';
 import '../npc/omnimind.dart';
 import 'arcade_flow.dart';
