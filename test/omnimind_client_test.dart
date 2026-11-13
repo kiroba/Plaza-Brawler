@@ -95,7 +95,7 @@ void main() {
       expect(f, isNotNull);
       expect(f!.source, 'omnimind');
       expect(f.name, 'Vexora');
-      expect(f.stats.power, 8);
+      expect(f.stats.power, 9); // manifest 8, +1 from Scorpio's Eighth House (houses layer)
       expect(f.layers.length, 5);
       expect(OmniMindClient.chipFor(f), 'OmniMind');
     },

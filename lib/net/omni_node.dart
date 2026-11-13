@@ -16,6 +16,7 @@
 //     MatchShare.payloadFrom summary is POSTed once to :5000/api/games/match (lib/net/match_share.dart);
 //     node-health's "features": ["games_match"] says whether the node has it. Per-hit fight events stay
 //     signed on this phone only (they don't belong on the shared chain).
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:omni_core_ui/omni_core_ui.dart';
 
@@ -26,6 +27,7 @@ import 'identity_transfer.dart';
 import 'lpe_client.dart';
 import 'lpe_fighter.dart';
 import 'omnimind_client.dart';
+import 'pack_fighter.dart';
 
 const FlutterSecureStorage _store = FlutterSecureStorage(
   aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -193,11 +195,38 @@ class OmniNodeClient {
   String? get lpeSign =>
       lpeProfile == null ? null : signFromLpeProfile(lpeProfile!);
 
+  /// Sprite bindings of the bundled default-Halo packs, by pack id (null
+  /// value = pack unreadable; the fighter then stays painted).
+  final Map<String, FighterSpriteBinding?> _packBindings = {};
+  bool _packsLoaded = false;
+
+  /// Loads the bundled figure packs' bindings once. Never throws; a pack
+  /// that can't be read simply never binds. Cheap to call repeatedly.
+  Future<void> loadPacks() async {
+    if (_packsLoaded) return;
+    _packsLoaded = true;
+    for (final id in defaultPackIds) {
+      _packBindings[id] = await loadPackBinding(rootBundle.loadString, id);
+    }
+  }
+
+  /// [f] wearing the default-Halo pack [profile] points at (or the default
+  /// pack when it points nowhere): the pack is the visual source for the
+  /// LPE "you". Unchanged when no pack could be loaded.
+  FighterDef _wearPack(FighterDef f, Map<String, dynamic>? profile) {
+    final id = profile == null
+        ? defaultPackId
+        : (packIdFromProfile(profile) ?? defaultPackId);
+    return withPackSprite(f, _packBindings[id]);
+  }
+
   /// The player's fighter from the LPE profile with [chosenSign] (the sign picked on this phone), or the
   /// offline fighter for [chosenSign] when there is no profile. Null only when there is no sign at all.
+  /// An LPE fighter wears the default-Halo pack (see [loadPacks]); the plain
+  /// offline fallback stays painted, exactly as before packs.
   FighterDef? playerFighter(String? chosenSign) {
     final f = fighterFromLpe(lpeProfile, chosenSign: chosenSign);
-    if (f != null) return f;
+    if (f != null) return _wearPack(f, lpeProfile);
     return chosenSign == null ? null : offlineFighter(chosenSign);
   }
 
@@ -231,7 +260,8 @@ class OmniNodeClient {
         pick,
         chosenSign: zodiacSigns[h % zodiacSigns.length],
       );
-      return f?.copyWith(source: 'plaza');
+      if (f == null) return null;
+      return _wearPack(f, pick).copyWith(source: 'plaza');
     } catch (_) {
       return null;
     }

@@ -1,0 +1,112 @@
+{
+  "manifest_version": "1.0.0",
+  "mod_id": "omnimod.base.reference-male-01",
+  "version": "0.1.0",
+  "category": "cosmetic_skin",
+  "figure_class": true,
+  "author": {
+    "handle": "kiro",
+    "pubkey_ed25519": null,
+    "attestation_badge": "HUMAN_VERIFIED_CREATOR"
+  },
+  "engine_target": "omniverse-figure-v0",
+  "provenance": {
+    "source_tool": "MPFB 2 (MakeHuman Plugin for Blender) \u2014 Blender 4.2.23 LTS, headless",
+    "base_licence": "CC0 1.0",
+    "licence_record": "intake/licence-record.md (in the pipeline workspace)",
+    "recipe_file": "recipe.json",
+    "native_preset_file": "figure.mpfb.json",
+    "derived_from": null
+  },
+  "signing": {
+    "status": "unsigned-draft",
+    "note": "Compiler signing (pipeline step S0) is a SHA-256 simulation, not real Ed25519. Staged workspaces are unsigned by design until S0 lands."
+  },
+  "assets": {
+    "spritesheets": [
+      {
+        "id": "sprite_three_quarter",
+        "file": "sprites/sprite_three_quarter_128.png",
+        "frame_px": 128,
+        "profile": "three_quarter",
+        "sha256": "2cba13a181ebdb113fa2a2cf5888ec6dab5c3e9f0cf6bc3200f44281943c8697"
+      },
+      {
+        "id": "sprite_front",
+        "file": "sprites/sprite_front_128.png",
+        "frame_px": 128,
+        "profile": "front",
+        "sha256": "65855a4a2cf169008718130d998052cdec0e6ba96eb603d117252fe42f9cbdd0"
+      },
+      {
+        "id": "sprite_isometric",
+        "file": "sprites/sprite_isometric_128.png",
+        "frame_px": 128,
+        "profile": "isometric",
+        "sha256": "b16543e888fea1644c7e2ff884c8c4d1ca70dc464dfc8988b61b5c0eaa3bfa69"
+      },
+      {
+        "id": "sprite_portrait",
+        "file": "sprites/sprite_portrait_128.png",
+        "frame_px": 128,
+        "profile": "portrait",
+        "sha256": "5f8b738ce1a6d5292c289c90b2dcfe3e73d1885f085a5404e248413d8917df93"
+      }
+    ],
+    "tilemaps": [],
+    "audio_banks": [],
+    "figure": {
+      "master": {
+        "file": "master.glb",
+        "format": "glTF 2.0 binary",
+        "rig": "game_engine (Mixamo-compatible bone names)",
+        "sha256": "59249ad6c94db77b1536c5585dff862c593b7421943412c2d698e2b9d585c45d"
+      },
+      "scene": {
+        "file": "master.blend",
+        "sha256": "601f2a56a35c9497faa3ee371bddfedac73070391667b680d870a50d9f44366a"
+      },
+      "recipe": {
+        "file": "recipe.json",
+        "sha256": "8e0f259cb1e4b6d5aaecb92338d5c579440100fb265cd6d88a7714e09ff794bb"
+      },
+      "native_preset": {
+        "file": "figure.mpfb.json",
+        "sha256": "e8645d90ee0197d1f74cddf947b9b17f80fdb648d551dd5d76ffc576f0e92642"
+      },
+      "socket_items": [
+        {
+          "id": "head_socket_eyebrow001",
+          "socket": "head_socket",
+          "asset_type": "Eyebrows",
+          "source_asset": "eyebrows/eyebrow001"
+        },
+        {
+          "id": "head_socket_short01",
+          "socket": "head_socket",
+          "asset_type": "Hair",
+          "source_asset": "hair/short01"
+        },
+        {
+          "id": "chest_socket_male_casualsuit01",
+          "socket": "chest_socket",
+          "asset_type": "Clothes",
+          "source_asset": "clothes/male_casualsuit01"
+        }
+      ],
+      "render_profiles_baked": [
+        "three_quarter",
+        "front",
+        "isometric",
+        "top_down",
+        "portrait"
+      ],
+      "render_profiles_derivable": [
+        "first_person",
+        "third_person",
+        "vr"
+      ],
+      "profiles_note": "Adaptability Principle: a perspective is a render profile over the same master + recipe, never a new character. The master carries no baked camera or projection assumptions."
+    }
+  }
+}

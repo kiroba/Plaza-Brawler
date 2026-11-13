@@ -36,6 +36,7 @@ class _BootScreenState extends State<BootScreen> {
       statusColor = conn.connected ? Colors.greenAccent : Colors.orangeAccent;
     });
     await omniNode.refreshLpe();
+    await omniNode.loadPacks();
     await omniNode.probeOmniMind();
     await appState.probeMatchSharing();
     if (!mounted) return;

@@ -50,3 +50,10 @@ flutter:
   assets:
     # CC0 sound effects (Kenney Impact Sounds + a synthesized menu blip); see assets/sfx/CREDITS.md.
     - assets/sfx/
+    # Default-Halo figure packs (OmniStudio is the source; copies are byte-identical to
+    # Phaser-Studio main, verified against each manifest's sha256). Consumed unpacked by
+    # lib/net/pack_fighter.dart; the .omnimod ZIP stays the distribution format.
+    - assets/packs/omnimod.base.reference-male-01/
+    - assets/packs/omnimod.base.reference-male-01/sprites/
+    - assets/packs/omnimod.base.reference-female-01/
+    - assets/packs/omnimod.base.reference-female-01/sprites/

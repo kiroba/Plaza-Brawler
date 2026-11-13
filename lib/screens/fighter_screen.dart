@@ -6,6 +6,7 @@
 // (lib/game/hit_feel.dart) only decide WHEN the engine ticks, so the engine stays deterministic; the K.O.
 // banner waits for the slow-mo. Sounds (hit / block / KO) play in player fights, not in the attract loop.
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -81,6 +82,9 @@ class _FighterScreenState extends State<FighterScreen>
   bool _paused = false;
   bool _ended = false;
   final List<int> _flash = [0, 0];
+
+  /// Decoded pack sprites by asset path for fighters wearing a pack binding.
+  final Map<String, ui.Image> _spriteImages = {};
   int _shakeFrames = 0;
   final HitFeel _feel = HitFeel();
   final Random _fxRng = Random(7);
@@ -92,6 +96,7 @@ class _FighterScreenState extends State<FighterScreen>
     _cfg = widget.config;
     _touch.onActivity = appState.kiosk.noteActivity;
     _engine = _newEngine(_cfg);
+    _loadSprites(_cfg);
     if (!_cfg.attract) appState.onPauseFight = _pauseFromKiosk;
     _ticker = createTicker(_onTick)..start();
   }
@@ -102,6 +107,22 @@ class _FighterScreenState extends State<FighterScreen>
     _focus.dispose();
     if (appState.onPauseFight == _pauseFromKiosk) appState.onPauseFight = null;
     super.dispose();
+  }
+
+  /// Decodes the three-quarter sprites of any pack-bound fighters in [c].
+  /// Failures leave the fighter painted; loads finish whenever they finish.
+  void _loadSprites(FightConfig c) {
+    for (final def in [c.p1, c.p2]) {
+      final binding = def.sprite;
+      if (binding == null || _spriteImages.containsKey(binding.bodyAsset)) {
+        continue;
+      }
+      loadFighterSpriteImage(binding.bodyAsset).then((img) {
+        if (img != null && mounted) {
+          setState(() => _spriteImages[binding.bodyAsset] = img);
+        }
+      });
+    }
   }
 
   MatchEngine _newEngine(FightConfig c) {
@@ -223,6 +244,7 @@ class _FighterScreenState extends State<FighterScreen>
           difficulty: 0.6,
         );
         _engine = _newEngine(_cfg);
+        _loadSprites(_cfg);
         _feel.reset();
         _ended = false;
       });
@@ -278,6 +300,7 @@ class _FighterScreenState extends State<FighterScreen>
                           engine: _engine,
                           flash: _flash,
                           shake: shake,
+                          spriteImages: _spriteImages,
                         ),
                       ),
                     ),

@@ -38,7 +38,7 @@ void main() {
     expect(f.id, 'lpe_aa11aa11aa11');
     expect(f.primary, 0xFF3A86EF);
     expect(f.layers.firstWhere((l) => l.layer == 'aura').tint, 0xFF3A86EF);
-    expect(f.stats.power, 8); // leo base stats
+    expect(f.stats.power, 9); // leo base 8, +1 from its Fifth House (houses layer)
   });
 
   test('an explicit sign field in the profile wins over the pick', () {
