@@ -38,6 +38,10 @@ dependencies:
   # PvP lobby QR display only (slice S1): renders the pairing payload.
   # No network, no scanning; the guest joins with the session code + IP.
   qr_flutter: ^4.1.0
+  # Desktop controller (D3): gamepad input on Windows via the GameInput API. The plugin is only
+  # listened to on Windows (lib/input/gamepad_bridge.dart); the Android build and behavior are
+  # unchanged (no MainActivity forwarding added, no Android gamepad support claimed).
+  gamepads: ^0.1.15
 
 dev_dependencies:
   flutter_test:
