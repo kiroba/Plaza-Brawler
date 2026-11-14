@@ -19,6 +19,9 @@ dependencies:
   cryptography: ^2.7.0
   crypto: ^3.0.3
   sqflite: ^2.3.0
+  # Desktop runtime (D2): the FFI database factory sqflite needs on Windows/Linux/macOS, where
+  # there is no platform channel. Also used by the plain-Dart tests below.
+  sqflite_common_ffi: ^2.3.0
   path: ^1.9.0
   flutter_secure_storage: ^9.2.4
   # Demo-day (kiosk) mode keeps the screen on. Capped at the 1.5.x line that CI built with this repo's AGP 8.11.1
@@ -42,8 +45,6 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   # Pure-Dart tests (test/*_test.dart that import package:test, e.g. game_engine_test, kiosk_test).
   test: ^1.24.0
-  # sqflite in plain-Dart tests (high_scores / feedback repos).
-  sqflite_common_ffi: ^2.3.0
 
 flutter:
   uses-material-design: true
