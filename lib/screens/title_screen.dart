@@ -128,21 +128,25 @@ class _TitleScreenState extends State<TitleScreen> {
   @override
   Widget build(BuildContext context) {
     final kiosk = appState.kioskOn;
+    // A landscape phone is ~360 dp tall: the stacked-button menu ran off
+    // the bottom (HIGH SCORES clipped, HOW TO PLAY / SETTINGS below the
+    // fold). Compact chrome + the icon grid below fit it on one screen.
+    final compact = MediaQuery.sizeOf(context).height < 520;
     return PopScope(
       canPop: !kiosk,
       child: BrawlerPage(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 12),
+            SizedBox(height: compact ? 4 : 12),
             Listener(
               onPointerDown: (_) => _logoDown(),
               onPointerUp: (_) => _logoUp(),
               onPointerCancel: (_) => _logoUp(),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 18,
+                padding: EdgeInsets.symmetric(
+                  vertical: compact ? 8 : 18,
                   horizontal: 12,
                 ),
                 decoration: BoxDecoration(
@@ -177,58 +181,57 @@ class _TitleScreenState extends State<TitleScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            BigButton(
-              'ARCADE',
-              icon: Icons.emoji_events,
-              onPressed: () => ArcadeFlow.startArcade(),
-            ),
-            BigButton(
-              'QUICK FIGHT',
-              icon: Icons.sports_mma,
-              color: BrawlerColors.gold,
-              onPressed: () => ArcadeFlow.startQuickFight(),
-            ),
-            if (!kiosk)
-              BigButton(
-                'PLAY TOGETHER',
-                icon: Icons.people,
-                color: BrawlerColors.panel,
-                textColor: Colors.white,
-                onPressed: () => pushNamedPage<void>(
-                  Routes.pvp,
-                  const PvpLobbyScreen(),
+            SizedBox(height: compact ? 10 : 20),
+            _MenuGrid(
+              items: [
+                _MenuItem(
+                  'ARCADE',
+                  icon: Icons.emoji_events,
+                  color: BrawlerColors.cyan,
+                  textColor: Colors.black,
+                  onPressed: () => ArcadeFlow.startArcade(),
                 ),
-              ),
-            BigButton(
-              'HIGH SCORES',
-              icon: Icons.leaderboard,
-              color: BrawlerColors.panel,
-              textColor: Colors.white,
-              onPressed: () => pushNamedPage<void>(
-                Routes.highScores,
-                const HighScoresScreen(),
-              ),
+                _MenuItem(
+                  'QUICK FIGHT',
+                  icon: Icons.sports_mma,
+                  color: BrawlerColors.gold,
+                  textColor: Colors.black,
+                  onPressed: () => ArcadeFlow.startQuickFight(),
+                ),
+                if (!kiosk)
+                  _MenuItem(
+                    'PLAY TOGETHER',
+                    icon: Icons.people,
+                    onPressed: () => pushNamedPage<void>(
+                      Routes.pvp,
+                      const PvpLobbyScreen(),
+                    ),
+                  ),
+                _MenuItem(
+                  'HIGH SCORES',
+                  icon: Icons.leaderboard,
+                  onPressed: () => pushNamedPage<void>(
+                    Routes.highScores,
+                    const HighScoresScreen(),
+                  ),
+                ),
+                _MenuItem(
+                  'HOW TO PLAY',
+                  icon: Icons.help_outline,
+                  onPressed: () => pushNamedPage<bool>(
+                    Routes.howToPlay,
+                    const HowToPlayScreen(),
+                  ),
+                ),
+                if (!kiosk)
+                  _MenuItem(
+                    'SETTINGS',
+                    icon: Icons.settings,
+                    onPressed: _openSettings,
+                  ),
+              ],
             ),
-            BigButton(
-              'HOW TO PLAY',
-              icon: Icons.help_outline,
-              color: BrawlerColors.panel,
-              textColor: Colors.white,
-              onPressed: () => pushNamedPage<bool>(
-                Routes.howToPlay,
-                const HowToPlayScreen(),
-              ),
-            ),
-            if (!kiosk)
-              BigButton(
-                'SETTINGS',
-                icon: Icons.settings,
-                color: BrawlerColors.panel,
-                textColor: Colors.white,
-                onPressed: _openSettings,
-              ),
-            const SizedBox(height: 16),
+            SizedBox(height: compact ? 8 : 16),
             _StatusChips(onTap: kiosk ? null : _openSettings),
             if (kiosk)
               const Padding(
@@ -247,6 +250,60 @@ class _TitleScreenState extends State<TitleScreen> {
   Future<void> _openSettings() async {
     await pushNamedPage<void>(Routes.settings, const SettingsScreen());
     if (mounted) setState(() {});
+  }
+}
+
+/// One entry in the title menu grid.
+class _MenuItem {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final Color textColor;
+  final VoidCallback onPressed;
+  const _MenuItem(
+    this.label, {
+    required this.icon,
+    this.color = BrawlerColors.panel,
+    this.textColor = Colors.white,
+    required this.onPressed,
+  });
+}
+
+/// The title menu as a phone-style icon grid, three tiles across. Two rows
+/// hold the whole menu (kiosk mode: four tiles), so it fits a landscape
+/// screen with no scrolling. Tile size stays constant on a short last row.
+class _MenuGrid extends StatelessWidget {
+  final List<_MenuItem> items;
+  const _MenuGrid({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    const cols = 3;
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += cols) {
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 6));
+      final rowItems = items.skip(i).take(cols).toList();
+      rows.add(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final item in rowItems)
+              Expanded(
+                child: IconMenuButton(
+                  item.label,
+                  icon: item.icon,
+                  color: item.color,
+                  textColor: item.textColor,
+                  onPressed: item.onPressed,
+                ),
+              ),
+            for (var j = rowItems.length; j < cols; j++)
+              const Expanded(child: SizedBox.shrink()),
+          ],
+        ),
+      );
+    }
+    return Column(mainAxisSize: MainAxisSize.min, children: rows);
   }
 }
 
