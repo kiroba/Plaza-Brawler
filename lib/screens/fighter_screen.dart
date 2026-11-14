@@ -17,9 +17,11 @@ import '../audio/sfx.dart';
 import '../game/arcade.dart';
 import '../game/cpu_brain.dart';
 import '../game/fighter.dart';
+import '../game/gamepad_input.dart';
 import '../game/hit_feel.dart';
 import '../game/input.dart';
 import '../game/match_engine.dart';
+import '../input/gamepad_bridge.dart';
 import '../net/omni_node.dart';
 import '../npc/omnimind.dart';
 import 'brawler_ui.dart';
@@ -72,6 +74,8 @@ class _FighterScreenState extends State<FighterScreen>
 
   final TouchInput _touch = TouchInput();
   final KeyboardInput _keys = KeyboardInput();
+  final GamepadInput _pad = GamepadInput();
+  late final GamepadBridge _padBridge = GamepadBridge(_pad);
   final FocusNode _focus = FocusNode();
   late MatchEngine _engine;
   late FightConfig _cfg;
@@ -91,6 +95,8 @@ class _FighterScreenState extends State<FighterScreen>
     super.initState();
     _cfg = widget.config;
     _touch.onActivity = appState.kiosk.noteActivity;
+    _pad.onActivity = appState.kiosk.noteActivity;
+    _padBridge.start();
     _engine = _newEngine(_cfg);
     if (!_cfg.attract) appState.onPauseFight = _pauseFromKiosk;
     _ticker = createTicker(_onTick)..start();
@@ -99,6 +105,7 @@ class _FighterScreenState extends State<FighterScreen>
   @override
   void dispose() {
     _ticker.dispose();
+    _padBridge.dispose();
     _focus.dispose();
     if (appState.onPauseFight == _pauseFromKiosk) appState.onPauseFight = null;
     super.dispose();
@@ -110,7 +117,7 @@ class _FighterScreenState extends State<FighterScreen>
             CpuBrain(def: c.p1, difficulty: 0.6, seed: c.seed ^ 0x51),
             side: 0,
           )
-        : MergedInput([_touch, _keys]);
+        : MergedInput([_touch, _keys, _pad]);
     // PvP hook: a RemoteInput goes here instead of the CPU in the multiplayer PR (spec 11).
     final InputSource p2 = CpuInput(
       CpuBrain(def: c.p2, difficulty: c.difficulty, seed: c.seed),
