@@ -383,6 +383,9 @@ class _HostCard extends StatelessWidget {
         ),
       );
     }
+    // Short screens (landscape phones): a smaller QR + code so the host
+    // card fits with no scrolling. 150 dp still scans fine at arm's length.
+    final compact = MediaQuery.sizeOf(context).height < 520;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -395,7 +398,7 @@ class _HostCard extends StatelessWidget {
           child: QrImageView(
             data: payload.toQrString(),
             version: QrVersions.auto,
-            size: 200,
+            size: compact ? 150 : 200,
             backgroundColor: Colors.white,
           ),
         ),
@@ -408,9 +411,9 @@ class _HostCard extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           runningHost.sessionCode,
-          style: const TextStyle(
+          style: TextStyle(
             color: BrawlerColors.gold,
-            fontSize: 40,
+            fontSize: compact ? 32 : 40,
             fontWeight: FontWeight.w900,
             letterSpacing: 8,
           ),

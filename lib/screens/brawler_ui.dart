@@ -1,4 +1,5 @@
-// Shared look for Plaza Brawler's menu screens: colours, a scrolling page that fits 360x640, big buttons,
+// Shared look for Plaza Brawler's menu screens: colours, a responsive page (compact on short screens,
+// wider in landscape), big buttons and phone-style icon menu tiles,
 // and a route helper that names every route (the kiosk timers read the name), the flow backdrop that keeps
 // the title from flashing between Arcade steps, and the menu "select" sound on every BigButton. Real, no stubs.
 import 'dart:async';
@@ -72,7 +73,9 @@ class _FlowBackdropState extends State<FlowBackdrop> {
   }
 }
 
-/// Dark page with an optional app bar; the body scrolls and is capped at 480 dp wide.
+/// Dark page with an optional app bar; the body scrolls and is capped at
+/// 480 dp wide in portrait (760 dp in landscape, where the width exists).
+/// Padding shrinks on short screens so menus can fit with no scrolling.
 class BrawlerPage extends StatelessWidget {
   final String? title;
   final Widget child;
@@ -111,20 +114,28 @@ class BrawlerPage extends StatelessWidget {
             ),
       body: SafeArea(
         child: LayoutBuilder(
-          builder: (context, c) => SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: c.maxHeight > 32 ? c.maxHeight - 32 : 0,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
-                  child: child,
+          builder: (context, c) {
+            // A phone in landscape is only ~360 dp tall: menus were built
+            // for 360x640 portrait and ran off the bottom. Short screens
+            // get tighter padding, and landscape gets its real width.
+            final compact = c.maxHeight < 520;
+            final pad = compact ? 10.0 : 16.0;
+            final maxWidth = c.maxWidth > c.maxHeight ? 760.0 : 480.0;
+            return SingleChildScrollView(
+              padding: EdgeInsets.all(pad),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: c.maxHeight > pad * 2 ? c.maxHeight - pad * 2 : 0,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxWidth),
+                    child: child,
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -150,11 +161,13 @@ class BigButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Short screens (landscape phones) get a slimmer button.
+    final compact = MediaQuery.sizeOf(context).height < 520;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: EdgeInsets.symmetric(vertical: compact ? 3 : 5),
       child: SizedBox(
         width: double.infinity,
-        height: 52,
+        height: compact ? 44 : 52,
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
@@ -189,6 +202,71 @@ class BigButton extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Phone-style menu tile: a rounded icon box with a small-to-medium label
+/// under it, like an app icon on a home screen. A grid of these takes about
+/// half the vertical room of stacked [BigButton]s, which is what lets a
+/// menu fit a landscape phone screen with no scrolling.
+class IconMenuButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onPressed;
+  final Color color;
+  final Color textColor;
+  final IconData icon;
+
+  const IconMenuButton(
+    this.label, {
+    super.key,
+    required this.icon,
+    this.onPressed,
+    this.color = BrawlerColors.panel,
+    this.textColor = Colors.white,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).height < 520;
+    final box = compact ? 46.0 : 56.0;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onPressed == null
+          ? null
+          : () {
+              sfx.select();
+              onPressed!();
+            },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: box,
+              height: box,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, size: compact ? 24 : 28, color: textColor),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: TextStyle(
+                color: onPressed == null ? Colors.white38 : Colors.white,
+                fontSize: compact ? 11 : 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ],
         ),
       ),
     );
