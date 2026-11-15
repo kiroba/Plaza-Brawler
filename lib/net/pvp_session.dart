@@ -199,6 +199,14 @@ class PvpMessage {
   /// S2: asks the peer to re-send its inputs from a frame onward.
   static const String need = 'need';
 
+  /// S3: a state-hash checkpoint for one stepped frame (see
+  /// pvp_lockstep.dart); a mismatch aborts the match as a desync.
+  static const String hash = 'hash';
+
+  /// S3: this side's signature over the result payload (see
+  /// pvp_result.dart); both signatures complete the pvp_match envelope.
+  static const String result = 'result';
+
   static const Set<String> types = {
     hello,
     challenge,
@@ -207,6 +215,8 @@ class PvpMessage {
     start,
     input,
     need,
+    hash,
+    result,
   };
 
   final String type;
@@ -268,6 +278,15 @@ List<int> pvpStartBytes(
   String sign,
 ) =>
     utf8.encode('pvp-start|$sessionId|$hostNonce|$guestNonce|$pubkey|$sign');
+
+/// The exact bytes each side signs over an S3 result payload: the prefix
+/// plus the payload's canonical JSON. [payload] must come from
+/// pvpMatchPayload (pvp_result.dart), whose fixed key order is the
+/// canonical form — both sides build the identical map, so both sign the
+/// identical bytes, and a signature only verifies against the payload it
+/// was made over.
+List<int> pvpResultBytes(Map<String, dynamic> payload) =>
+    utf8.encode('pvp-result|${jsonEncode(payload)}');
 
 /// The agreed match seed (spec §3.4): sha256(host_nonce || guest_nonce),
 /// first 4 digest bytes as a 31-bit positive int (the range the rest of

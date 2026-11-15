@@ -228,8 +228,9 @@ class _FighterScreenState extends State<FighterScreen>
     _feel.onFx(_engine.fx);
     if (!_cfg.attract) _playSounds();
     final events = _engine.drainEvents();
-    // PvP events are drained and dropped: no node dispatch, no match
-    // sharing — the signed result envelope is slice S3.
+    // PvP events are drained and dropped: no in-match node dispatch.
+    // At a clean end the lobby exchanges the dual-signed S3 result
+    // envelope and stores/shares that instead (lib/net/pvp_result.dart).
     if (!_cfg.attract && !_cfg.pvp) {
       for (final e in events) {
         if (e.type == 'FIGHTER_ROUND_END') {

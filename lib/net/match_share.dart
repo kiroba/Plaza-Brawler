@@ -8,6 +8,8 @@
 // this phone only. No retries: the node doesn't de-duplicate bare posts, so a retry could store a match twice.
 // [probe] reads "features" from GET :9100/api/v1/telemetry/node-health ("games_match" = supported; nodes
 // before 8.28.0 have no features key) so Settings only enables the switch when the node can take results.
+// PvP (S3) reuses this class unchanged in shape: [sharePvpMatch] stores the dual-signed pvp_match
+// envelope through the same saver and POSTs it through the same route when sharing is on.
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -161,6 +163,32 @@ class MatchShare {
     final code = await _post(
       payloadFrom(summary, appVersion: appVersion, score: score),
     );
+    final r = resultFor(code, savedLocally: saved);
+    if (code == 404) nodeSupportsMatches = false;
+    if (code == 200) nodeSupportsMatches = true;
+    return lastResult = r;
+  }
+
+  /// PvP slice S3: stores a completed dual-signed [envelope] (the
+  /// pvp_match JSON from pvp_result.dart) on this phone through the same
+  /// [saveLocal] hook solo matches use, then — sharing on only — POSTs
+  /// the envelope once to POST /api/games/match, the same route, headers
+  /// and one-shot/no-retry discipline as [shareMatch]. A desynced or
+  /// aborted match never reaches this call: no envelope exists for it.
+  /// Never throws.
+  Future<ShareResult> sharePvpMatch(Map<String, dynamic> envelope) async {
+    var saved = false;
+    try {
+      saved = await (saveLocal?.call(envelope) ?? Future.value(false));
+    } catch (_) {
+      saved = false;
+    }
+    final local = saved ? ShareResult.savedLocalOnly : ShareResult.notSaved;
+    if (!shareEnabled) return lastResult = local;
+    if (nodeSupportsMatches == false) {
+      return lastResult = saved ? ShareResult.nodeTooOld : ShareResult.notSaved;
+    }
+    final code = await _post(envelope);
     final r = resultFor(code, savedLocally: saved);
     if (code == 404) nodeSupportsMatches = false;
     if (code == 200) nodeSupportsMatches = true;
