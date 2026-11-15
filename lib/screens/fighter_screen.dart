@@ -23,6 +23,7 @@ import '../game/input.dart';
 import '../game/match_engine.dart';
 import '../input/gamepad_bridge.dart';
 import '../net/omni_node.dart';
+import '../net/pvp_lockstep.dart';
 import '../npc/omnimind.dart';
 import 'brawler_ui.dart';
 
@@ -41,6 +42,11 @@ class FightConfig {
   /// The arcade run (for the live score in the HUD and round scoring), or null.
   final ArcadeRun? run;
 
+  /// S2 lockstep driver when this is a PvP match (null for solo/attract).
+  /// The lobby creates it over the S1 session; this screen attaches the
+  /// engine and pumps it instead of polling a CPU for P2.
+  final PvpLockstep? lockstep;
+
   const FightConfig({
     required this.p1,
     required this.p2,
@@ -48,9 +54,15 @@ class FightConfig {
     this.mode = 'quick',
     this.difficulty = 0.5,
     this.run,
+    this.lockstep,
   });
 
   bool get attract => mode == 'attract';
+
+  bool get pvp => lockstep != null;
+
+  /// The side the local player drives in PvP: host is P1 (0), guest P2 (1).
+  int get localSide => lockstep?.isHost == false ? 1 : 0;
 }
 
 /// What the fight screen pops with.
@@ -85,6 +97,7 @@ class _FighterScreenState extends State<FighterScreen>
   bool _paused = false;
   bool _ended = false;
   final List<int> _flash = [0, 0];
+
   int _shakeFrames = 0;
   final HitFeel _feel = HitFeel();
   final Random _fxRng = Random(7);
@@ -98,12 +111,19 @@ class _FighterScreenState extends State<FighterScreen>
     _pad.onActivity = appState.kiosk.noteActivity;
     _padBridge.start();
     _engine = _newEngine(_cfg);
+    final lockstep = _cfg.lockstep;
+    if (lockstep != null) {
+      lockstep.attach(_engine);
+      lockstep.onAbort = _onPvpAbort;
+    }
     if (!_cfg.attract) appState.onPauseFight = _pauseFromKiosk;
     _ticker = createTicker(_onTick)..start();
   }
 
   @override
   void dispose() {
+    _cfg.lockstep?.leave();
+    _cfg.lockstep?.dispose();
     _ticker.dispose();
     _padBridge.dispose();
     _focus.dispose();
@@ -118,11 +138,15 @@ class _FighterScreenState extends State<FighterScreen>
             side: 0,
           )
         : MergedInput([_touch, _keys, _pad]);
-    // PvP hook: a RemoteInput goes here instead of the CPU in the multiplayer PR (spec 11).
-    final InputSource p2 = CpuInput(
-      CpuBrain(def: c.p2, difficulty: c.difficulty, seed: c.seed),
-      side: 1,
-    );
+    // PvP (S2): no CPU on either side — the lockstep driver steps the
+    // engine with both players' intents via tickWith. input1 stays wired
+    // as the local sampler the driver polls each tick.
+    final InputSource? p2 = c.pvp
+        ? null
+        : CpuInput(
+            CpuBrain(def: c.p2, difficulty: c.difficulty, seed: c.seed),
+            side: 1,
+          );
     return MatchEngine(
       p1: c.p1,
       p2: c.p2,
@@ -131,6 +155,17 @@ class _FighterScreenState extends State<FighterScreen>
       seed: c.seed,
       mode: c.mode,
     );
+  }
+
+  /// The lockstep match died (stall timeout, peer left, socket closed):
+  /// leave back to the lobby, which reads the reason off the driver.
+  void _onPvpAbort(String reason) {
+    if (_ended || !mounted) return;
+    _ended = true;
+    // onAbort can fire inside the ticker callback; pop on the next frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
   }
 
   void _pauseFromKiosk() {
@@ -158,8 +193,16 @@ class _FighterScreenState extends State<FighterScreen>
     var steps = 0;
     while (_acc >= _stepMicros && steps < 5) {
       if (_shakeFrames > 0) _shakeFrames--;
-      // Hit-stop / KO slow-mo: some display steps don't run the engine (see HitFeel).
-      if (_feel.shouldTick()) {
+      if (_cfg.pvp) {
+        // Lockstep: sample + send the local intent, step only when both
+        // sides' inputs for a frame exist. HitFeel is skipped — steps are
+        // paced by the peer and both phones must step identically.
+        final stepped = _cfg.lockstep!.pump(
+          () => _engine.input1!.poll(_engine.snapshot),
+        );
+        if (stepped > 0) _afterStep();
+      } else if (_feel.shouldTick()) {
+        // Hit-stop / KO slow-mo: some display steps don't run the engine (see HitFeel).
         _engine.tick();
         _afterStep();
       }
@@ -185,7 +228,9 @@ class _FighterScreenState extends State<FighterScreen>
     _feel.onFx(_engine.fx);
     if (!_cfg.attract) _playSounds();
     final events = _engine.drainEvents();
-    if (!_cfg.attract) {
+    // PvP events are drained and dropped: no node dispatch, no match
+    // sharing — the signed result envelope is slice S3.
+    if (!_cfg.attract && !_cfg.pvp) {
       for (final e in events) {
         if (e.type == 'FIGHTER_ROUND_END') {
           if (_engine.results.isNotEmpty) {
@@ -237,7 +282,7 @@ class _FighterScreenState extends State<FighterScreen>
     }
     Navigator.of(context).pop(
       FightOutcome(
-        playerWon: _engine.matchWinner == 0,
+        playerWon: _engine.matchWinner == _cfg.localSide,
         summary: _engine.summary(),
       ),
     );
@@ -309,6 +354,8 @@ class _FighterScreenState extends State<FighterScreen>
                       _Banner(text: _roundText()),
                     if (_cfg.attract) const _AttractOverlay(),
                     if (_paused) _PauseOverlay(onResume: _resume),
+                    if (_cfg.pvp && _cfg.lockstep!.stalled)
+                      const _Banner(text: 'Waiting for opponent…'),
                     if (!_cfg.attract && !appState.kioskOn)
                       Positioned(
                         top: 40,
@@ -339,7 +386,7 @@ class _FighterScreenState extends State<FighterScreen>
       if (_cfg.attract) {
         return '${_engine.fighter(w).def.name.toUpperCase()} WINS';
     }
-      return w == 0 ? 'YOU WIN!' : 'YOU LOSE';
+      return w == _cfg.localSide ? 'YOU WIN!' : 'YOU LOSE';
     }
     final r = _engine.results.isEmpty ? null : _engine.results.last;
     if (r == null) return '';
