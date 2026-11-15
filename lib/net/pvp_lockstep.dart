@@ -19,7 +19,14 @@
 // every input message repeats the previous 3 frames (history window),
 // and a side that is missing a frame asks for a re-send ('need').
 //
-// No state hashes, no result envelope, no node posting — that is S3.
+// S3 integrity (spec §5): every [hashInterval] stepped frames each side
+// hashes its engine state (MatchEngine.stateHash) and swaps the hash
+// with the peer. A mismatch means the two engines have diverged — a
+// DESYNC: the match aborts on both sides with [desyncReason], and no
+// result is recorded or shared. The result envelope itself (dual-signed,
+// stored, opt-in shared) is pvp_result.dart, run by the lobby at a clean
+// match end; the driver never posts anything to the node.
+//
 // Pure Dart: no Flutter / dart:ui imports, unit-testable in the VM.
 import 'dart:async';
 
@@ -190,6 +197,13 @@ class PvpLockstep {
   /// Cap on inputs re-sent per 'need' request.
   static const int resendWindow = 30;
 
+  /// S3: stepped frames between state-hash checkpoints (spec §5).
+  static const int hashInterval = 60;
+
+  /// The exact words both phones surface when a checkpoint disagrees:
+  /// the match is dropped and nothing is recorded or shared.
+  static const String desyncReason = 'Match desynced — no result recorded.';
+
   final bool isHost;
   final String sessionId;
   final Stream<PvpMessage> _messages;
@@ -202,6 +216,12 @@ class PvpLockstep {
 
   PvpMatchState _state = PvpMatchState.running;
   String? _abortReason;
+  bool _desynced = false;
+
+  /// S3 checkpoints: my engine's state hash per checkpoint frame, and
+  /// the peer's hashes that arrived before I reached their frame.
+  final Map<int, String> _myHashes = {};
+  final Map<int, String> _peerHashes = {};
 
   /// Called once when the match aborts (stall timeout, peer abort, socket
   /// closed). The fight screen uses it to leave back to the lobby.
@@ -259,6 +279,11 @@ class PvpLockstep {
   bool get finished => _state == PvpMatchState.finished;
   String? get abortReason => _abortReason;
 
+  /// True when the match died as an S3 desync (a state-hash checkpoint
+  /// disagreed, here or on the peer). A desynced match is never stored
+  /// or shared; the lobby checks this before the result exchange.
+  bool get desynced => _desynced;
+
   /// Engine frames stepped so far (== the next frame waiting for inputs).
   int get steppedFrames => _stepped;
 
@@ -298,6 +323,8 @@ class PvpLockstep {
       }
       _stepped++;
       steps++;
+      if (_stepped % hashInterval == 0) _checkpoint(engine);
+      if (_state == PvpMatchState.aborted) break; // desynced mid-burst
     }
 
     final now = _clock();
@@ -322,8 +349,42 @@ class PvpLockstep {
         }
       }
     }
-    if (engine.isOver) _state = PvpMatchState.finished;
+    if (_state != PvpMatchState.aborted && engine.isOver) {
+      _state = PvpMatchState.finished;
+    }
     return steps;
+  }
+
+  /// S3 checkpoint: the engine has just stepped to a checkpoint frame.
+  /// Hash its state, send the hash to the peer, and compare against the
+  /// peer's hash for this frame when both are in hand — whichever side
+  /// gets the second hash does the comparing, so a divergence is caught
+  /// by at least one side, which then tells the other (abort 'desync').
+  void _checkpoint(MatchEngine engine) {
+    final hash = engine.stateHash();
+    _myHashes[_stepped] = hash;
+    _send(
+      PvpMessage(PvpMessage.hash, sessionId, {
+        'frame': _stepped,
+        'hash': hash,
+      }),
+    );
+    final peerHash = _peerHashes[_stepped];
+    if (peerHash != null && peerHash != hash) _desync(notifyPeer: true);
+  }
+
+  /// The two engines have diverged: kill the match on both sides with
+  /// no result. Runs even from the finished state — until the result
+  /// exchange completes, a late checkpoint can still veto the match.
+  void _desync({required bool notifyPeer}) {
+    _desynced = true;
+    if (_state == PvpMatchState.aborted) return;
+    _state = PvpMatchState.aborted;
+    _abortReason = desyncReason;
+    if (notifyPeer) {
+      _send(PvpMessage(PvpMessage.abort, sessionId, {'reason': 'desync'}));
+    }
+    onAbort?.call(desyncReason);
   }
 
   void _sendInput(int frame) {
@@ -363,11 +424,27 @@ class PvpLockstep {
             if (_local.containsKey(f)) _sendInput(f);
           }
         }
+      case PvpMessage.hash:
+        final frame = message.data['frame'];
+        final hash = message.data['hash'];
+        if (frame is int && hash is String) {
+          final mine = _myHashes[frame];
+          if (mine != null) {
+            if (mine != hash) _desync(notifyPeer: true);
+          } else {
+            // The peer is ahead of us: compare when we step that frame.
+            _peerHashes[frame] = hash;
+          }
+        }
       case PvpMessage.abort:
-        _abort(
-          'The other phone left the match (${message.data['reason'] ?? 'no reason'}).',
-          notifyPeer: false,
-        );
+        if (message.data['reason'] == 'desync') {
+          _desync(notifyPeer: false);
+        } else {
+          _abort(
+            'The other phone left the match (${message.data['reason'] ?? 'no reason'}).',
+            notifyPeer: false,
+          );
+        }
     }
   }
 

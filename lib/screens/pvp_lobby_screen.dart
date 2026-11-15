@@ -1,11 +1,13 @@
-// PvP lobby (slices S1 + S2): host a session or join one, on the same
-// LAN. Host shows a QR code with the pairing payload plus a 6-digit
+// PvP lobby (slices S1 + S2 + S3): host a session or join one, on the
+// same LAN. Host shows a QR code with the pairing payload plus a 6-digit
 // session code; the guest joins with the code + host IP (in-app QR
 // scanning lands in a later slice). Once the S1 handshake completes, the
 // S2 start exchange swaps each side's picked fighter sign and the fight
-// runs in lockstep (lib/net/pvp_lockstep.dart). Either side leaving (or
-// the peer dropping) returns both phones here; single-player is
-// untouched.
+// runs in lockstep (lib/net/pvp_lockstep.dart). At a clean end the S3
+// result exchange (lib/net/pvp_result.dart) dual-signs the result,
+// which is then stored on the phone and shared only if match sharing is
+// on. Either side leaving (or the peer dropping) returns both phones
+// here; single-player is untouched.
 import 'package:flutter/material.dart';
 import 'package:omni_core_ui/omni_core_ui.dart' show StargateIdentity;
 import 'package:qr_flutter/qr_flutter.dart';
@@ -13,6 +15,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../app_state.dart';
 import '../net/omni_node.dart';
 import '../net/pvp_lockstep.dart';
+import '../net/pvp_result.dart';
 import '../net/pvp_session.dart';
 import '../npc/zodiac_offline.dart';
 import 'brawler_ui.dart';
@@ -164,8 +167,9 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen> {
 
   /// S2: swap signed start messages, build the two fighters (host is
   /// always P1, guest always P2), run the lockstep fight, then show the
-  /// normal game-over screen. The session closes when the match does —
-  /// one match per session, as in S1.
+  /// normal game-over screen. S3: at a clean end, dual-sign and store
+  /// the result before the game-over screen. The session closes when the
+  /// match does — one match per session, as in S1.
   Future<void> _startMatch(PvpSession session) async {
     final identity = _identity;
     if (identity == null) return;
@@ -230,6 +234,43 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen> {
         });
         return;
       }
+      // S3: a desync caught after the final bell still vetoes the
+      // result — nothing is stored or shared for a desynced match.
+      if (driver.desynced) {
+        _disposeHost();
+        await session.close();
+        if (!mounted) return;
+        setState(() {
+          _session = null;
+          _ended = true;
+          _error = PvpLockstep.desyncReason;
+          _status = '';
+        });
+        return;
+      }
+      // S3: both phones build the identical result payload from the
+      // session + the match summary, swap signatures, and the completed
+      // dual-signed envelope is stored on this phone (and shared only
+      // when the player's match-sharing switch is on). If the peer's
+      // signature does not cover our payload, the exchange throws and
+      // nothing is recorded.
+      final payload = pvpMatchPayload(
+        sessionId: session.sessionId,
+        seed: session.matchSeed,
+        hostPubkey: session.isHost ? identity.pubkeyHex : session.peerPubkey,
+        guestPubkey: session.isHost ? session.peerPubkey : identity.pubkeyHex,
+        hostSign: session.isHost ? mySign : start.peerSign,
+        guestSign: session.isHost ? start.peerSign : mySign,
+        summary: outcome.summary,
+      );
+      final envelope = await pvpExchangeResult(
+        session: session,
+        payload: payload,
+        sign: identity.signBytes,
+      );
+      if (!mounted || _session != session) return;
+      await appState.matchShare.sharePvpMatch(envelope.toJson());
+      if (!mounted || _session != session) return;
       // Clean finish: the normal game-over screen, from my side's view.
       // Its RETRY button also lands back here — a rematch is a fresh
       // host/join in S2 (one match per session).
