@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../art/fighter_painter.dart';
 import '../audio/sfx.dart';
 import '../game/fighter.dart';
+import '../npc/houses.dart';
 import '../npc/zodiac_offline.dart';
 import '../net/omni_node.dart';
 import 'brawler_ui.dart';
@@ -250,7 +251,7 @@ class _CarouselCard extends StatelessWidget {
                 Text(
                   def.source == 'plaza'
                       ? (def.handle ?? def.name)
-                      : '${_glyphs[def.sign] ?? ''} ${def.element.toUpperCase()} · ${_cap(def.archetype)}',
+                      : '${_glyphs[def.sign] ?? ''} ${def.element.toUpperCase()} · ${_cap(def.archetype)}${houseOf(def.sign) == null ? '' : ' · ${houseOf(def.sign)!.title}'}',
                   style: TextStyle(
                     color: color,
                     fontSize: 11,
@@ -278,6 +279,14 @@ class _DetailPanel extends StatelessWidget {
     final personality = def.source == 'plaza'
         ? 'A challenger from your plaza. No dossier — yet.'
         : 'The ${_cap(def.archetype)} — ${def.temperament.join(', ')}.';
+    // The house this fighter wears (its shade sits last in the temperament),
+    // and the sign's raw stats the house nudged away from.
+    final house = houseOf(def.sign);
+    final base = zodiacTable[def.sign]?.stats;
+    final wearsHouse = house != null &&
+        base != null &&
+        def.temperament.isNotEmpty &&
+        def.temperament.last == house.shade;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
@@ -288,10 +297,44 @@ class _DetailPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StatBar(label: 'Power', value: s.power, color: accent),
-          _StatBar(label: 'Agility', value: s.agility, color: accent),
-          _StatBar(label: 'Wit', value: s.wit, color: accent),
-          _StatBar(label: 'Resolve', value: s.resolve, color: accent),
+          if (wearsHouse)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '${_glyphs[def.sign] ?? ''} ${def.signTitle} · ${house.title} — ${house.domain}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ),
+          _StatBar(
+            label: 'Power',
+            value: s.power,
+            base: wearsHouse ? base.power : null,
+            color: accent,
+          ),
+          _StatBar(
+            label: 'Agility',
+            value: s.agility,
+            base: wearsHouse ? base.agility : null,
+            color: accent,
+          ),
+          _StatBar(
+            label: 'Wit',
+            value: s.wit,
+            base: wearsHouse ? base.wit : null,
+            color: accent,
+          ),
+          _StatBar(
+            label: 'Resolve',
+            value: s.resolve,
+            base: wearsHouse ? base.resolve : null,
+            color: accent,
+          ),
           const SizedBox(height: 8),
           Text(
             personality,
@@ -317,8 +360,17 @@ class _DetailPanel extends StatelessWidget {
 class _StatBar extends StatelessWidget {
   final String label;
   final int value;
+
+  /// The sign's raw value before its house nudge (null = no house shown);
+  /// a difference renders as a +1 / -1 marker beside the effective value.
+  final int? base;
   final Color color;
-  const _StatBar({required this.label, required this.value, required this.color});
+  const _StatBar({
+    required this.label,
+    required this.value,
+    this.base,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -346,12 +398,16 @@ class _StatBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 20,
+            width: 38,
             child: Text(
-              '$value',
+              base == null || base == value
+                  ? '$value'
+                  : '$value ${value > base! ? '+1' : '-1'}',
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: base == null || base == value
+                    ? Colors.white
+                    : (value > base! ? Colors.greenAccent : Colors.redAccent),
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),

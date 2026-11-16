@@ -90,6 +90,41 @@ class FighterLayer {
   });
 }
 
+/// Sprite binding from a figure pack (OmniStudio .omnimod): the bundled asset
+/// paths the art layer draws instead of the painted fighter. Pure data (paths
+/// only) so this file stays Flutter-free; the UI layer resolves and decodes.
+/// Null on a FighterDef means "painted fighter", as every fighter was before
+/// packs.
+class FighterSpriteBinding {
+  /// Asset path of the pack portrait (select screens, VS splash, game over).
+  final String portraitAsset;
+
+  /// Asset path of the three-quarter body sprite (in-match body).
+  final String bodyAsset;
+
+  /// The pack this binding came from ('omnimod.base.reference-male-01', ...).
+  final String packId;
+
+  const FighterSpriteBinding({
+    required this.portraitAsset,
+    required this.bodyAsset,
+    required this.packId,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is FighterSpriteBinding &&
+      other.portraitAsset == portraitAsset &&
+      other.bodyAsset == bodyAsset &&
+      other.packId == packId;
+
+  @override
+  int get hashCode => Object.hash(portraitAsset, bodyAsset, packId);
+
+  @override
+  String toString() => 'FighterSpriteBinding($packId)';
+}
+
 /// Who a fighter is: identity, stats, palette and special. Immutable.
 class FighterDef {
   final String id;
@@ -118,6 +153,10 @@ class FighterDef {
   final String? handle;
   final String? auraTier;
 
+  /// Pack sprite binding for the default-Halo templates (and LPE fighters
+  /// wearing one). Null = painted fighter.
+  final FighterSpriteBinding? sprite;
+
   const FighterDef({
     required this.id,
     required this.name,
@@ -132,6 +171,7 @@ class FighterDef {
     this.layers = const [],
     this.handle,
     this.auraTier,
+    this.sprite,
   });
 
   bool get isBoss => specialId == 'all';
@@ -147,20 +187,25 @@ class FighterDef {
     String? handle,
     String? auraTier,
     List<FighterLayer>? layers,
+    FighterStats? stats,
+    List<String>? temperament,
+    FighterSpriteBinding? sprite,
+    bool clearSprite = false,
   }) => FighterDef(
     id: id ?? this.id,
     name: name ?? this.name,
     sign: sign,
     element: element,
     archetype: archetype,
-    stats: stats,
+    stats: stats ?? this.stats,
     primary: primary ?? this.primary,
-    temperament: temperament,
+    temperament: temperament ?? this.temperament,
     specialId: specialId,
     source: source ?? this.source,
     layers: layers ?? this.layers,
     handle: handle ?? this.handle,
     auraTier: auraTier ?? this.auraTier,
+    sprite: clearSprite ? null : (sprite ?? this.sprite),
   );
 }
 

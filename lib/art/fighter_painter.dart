@@ -3,8 +3,10 @@
 // Real: everything drawn here. Stubbed: the Kaggle FLUX sprites; when they land, a sprite resolver swaps
 // PNGs in by asset_id (not part of this build).
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../game/fighter.dart';
 import '../game/match_engine.dart';
@@ -19,10 +21,16 @@ class ArenaPainter extends CustomPainter {
   /// Screen shake offset in arena px.
   final Offset shake;
 
+  /// Decoded three-quarter pack sprites by asset path, for fighters whose
+  /// def carries a sprite binding. A missing entry paints the fighter as
+  /// before, so a sprite that fails to load never breaks a match.
+  final Map<String, ui.Image> spriteImages;
+
   ArenaPainter({
     required this.engine,
     required this.flash,
     this.shake = Offset.zero,
+    this.spriteImages = const {},
   }) : super();
 
   static const double _groundFrac = 0.82;
@@ -56,8 +64,24 @@ class ArenaPainter extends CustomPainter {
         Paint()..color = Colors.white70,
       );
     }
-    paintFighter(canvas, engine.p2, groundY, flash.length > 1 && flash[1] > 0);
-    paintFighter(canvas, engine.p1, groundY, flash.isNotEmpty && flash[0] > 0);
+    paintFighter(
+      canvas,
+      engine.p2,
+      groundY,
+      flash.length > 1 && flash[1] > 0,
+      sprite: engine.p2.def.sprite == null
+          ? null
+          : spriteImages[engine.p2.def.sprite!.bodyAsset],
+    );
+    paintFighter(
+      canvas,
+      engine.p1,
+      groundY,
+      flash.isNotEmpty && flash[0] > 0,
+      sprite: engine.p1.def.sprite == null
+          ? null
+          : spriteImages[engine.p1.def.sprite!.bodyAsset],
+    );
     canvas.restore();
   }
 
@@ -110,8 +134,9 @@ class ArenaPainter extends CustomPainter {
     Canvas canvas,
     FighterState f,
     double groundY,
-    bool flashing,
-  ) {
+    bool flashing, {
+    ui.Image? sprite,
+  }) {
     final d = f.def;
     final primary = Color(d.primary);
     final body = flashing ? Colors.white : _layerTint(d, 'body', primary);
@@ -143,6 +168,57 @@ class ArenaPainter extends CustomPainter {
         )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
     );
+
+    // Pack sprite body: one static image, posed by transform the way the
+    // painted fighter reads (translation already applied above; walk bobs,
+    // attacks lunge, blocks tuck). The hit flash whitens it like the painted
+    // body. Blocking keeps the shield arc drawn below.
+    if (sprite != null) {
+      var dx = 0.0;
+      var dy = 0.0;
+      if (f.action == FighterAction.walk) {
+        dy = -math.sin(f.actionFrames * 0.4).abs() * 3;
+      } else if (f.action == FighterAction.light ||
+          f.action == FighterAction.heavy) {
+        dx = 7;
+      } else if (f.action == FighterAction.special) {
+        dx = 4;
+        dy = -3;
+      } else if (f.action == FighterAction.block) {
+        dx = -3;
+      }
+      const h = 116.0;
+      final dst = Rect.fromLTWH(-h / 2 + dx, -h + 3 + dy, h, h);
+      final paint = Paint();
+      if (flashing) {
+        paint.colorFilter = const ColorFilter.matrix(<double>[
+          0, 0, 0, 0, 255, //
+          0, 0, 0, 0, 255, //
+          0, 0, 0, 0, 255, //
+          0, 0, 0, 1, 0,
+        ]);
+      }
+      canvas.drawImageRect(
+        sprite,
+        Rect.fromLTWH(0, 0, sprite.width.toDouble(), sprite.height.toDouble()),
+        dst,
+        paint,
+      );
+      if (f.blocking) {
+        canvas.drawArc(
+          const Rect.fromLTWH(4, -100, 40, 80),
+          -math.pi / 2.6,
+          math.pi / 1.3,
+          false,
+          Paint()
+            ..color = const Color(0xAA00E5FF)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 4,
+        );
+      }
+      canvas.restore();
+      return;
+    }
 
     final limb = Paint()
       ..color = body
@@ -241,11 +317,48 @@ class FighterPortrait extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final binding = def.sprite;
+    if (binding == null) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(painter: _PortraitPainter(def, facingRight)),
+      );
+    }
+    // Pack portrait. Any load failure falls back to the painted portrait —
+    // the binding is an enhancement, never a dependency.
+    final painted = SizedBox(
       width: size,
       height: size,
       child: CustomPaint(painter: _PortraitPainter(def, facingRight)),
     );
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Transform.flip(
+        flipX: !facingRight,
+        child: Image.asset(
+          binding.portraitAsset,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => painted,
+        ),
+      ),
+    );
+  }
+}
+
+/// Decodes a bundled asset image for the arena painter. Null on any
+/// failure — callers treat a missing sprite as "painted fighter".
+Future<ui.Image?> loadFighterSpriteImage(String asset) async {
+  try {
+    final data = await rootBundle.load(asset);
+    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    final frame = await codec.getNextFrame();
+    return frame.image;
+  } catch (_) {
+    return null;
   }
 }
 

@@ -5,6 +5,7 @@
 // seeded names and layer picks come from OmniMind when the node is there (lib/net/omnimind_client.dart).
 import '../game/fighter.dart';
 import '../game/specials.dart';
+import 'houses.dart';
 
 class ZodiacSign {
   final String sign;
@@ -232,7 +233,7 @@ FighterDef? offlineFighter(String sign) {
     ),
   ];
   final arch = z.archetype[0].toUpperCase() + z.archetype.substring(1);
-  return FighterDef(
+  return applyHouse(FighterDef(
     id: 'offline_$key',
     name: '$arch of ${z.title}',
     sign: key,
@@ -244,7 +245,7 @@ FighterDef? offlineFighter(String sign) {
     specialId: Specials.idForElement(z.element),
     source: 'offline',
     layers: layers,
-  );
+  ));
 }
 
 /// All 12 offline fighters in daemon order.
@@ -333,7 +334,7 @@ FighterDef? fighterFromManifest(
     }
     final name = (m['name'] ?? '').toString();
     final hash = (m['manifest_hash'] ?? '').toString();
-    return FighterDef(
+    return applyHouse(FighterDef(
       id: 'omnimind_${sign}_${hash.length >= 8 ? hash.substring(0, 8) : (m['seed'] ?? 0)}',
       name: name.isEmpty ? offlineFighter(sign)!.name : name,
       sign: sign,
@@ -345,7 +346,7 @@ FighterDef? fighterFromManifest(
       specialId: Specials.idForElement(element),
       source: source,
       layers: layers,
-    );
+    ));
   } catch (_) {
     return null;
   }
@@ -371,11 +372,40 @@ const Map<String, String> _taunts = {
   'relentless': 'Thirteen signs. You are only one.',
 };
 
-/// One-line VS splash taunt from the fighter's temperament.
+const Map<String, String> _houseTaunts = {
+  'first': 'I am the first thing you will regret.',
+  'second': 'What is mine stays mine.',
+  'third': 'I have already read your next move.',
+  'fourth': 'My roots do not move for you.',
+  'fifth': 'The crowd came to see me, not you.',
+  'sixth': 'Craft beats noise. Watch.',
+  'seventh': 'Every bond I keep makes me faster.',
+  'eighth': 'I have seen the deep end. You have not.',
+  'ninth': 'The horizon is mine. Run if you like.',
+  'tenth': 'Ambition does not blink.',
+  'eleventh': 'I fight for everyone watching.',
+  'twelfth': 'I dreamt this ending too.',
+};
+
+/// One-line VS splash taunt from the fighter's temperament. A zodiac fighter
+/// wearing a house (the house shade sits last in its temperament) gets its
+/// sign's line tinted with the house's line; unhoused fighters are unchanged.
 String tauntFor(FighterDef f) {
+  String? base;
   for (final t in f.temperament) {
     final line = _taunts[t];
-    if (line != null) return line;
+    if (line != null) {
+      base = line;
+      break;
+    }
   }
-  return 'Let us see what you have.';
+  base ??= 'Let us see what you have.';
+  final house = houseOf(f.sign);
+  if (house != null &&
+      f.temperament.isNotEmpty &&
+      f.temperament.last == house.shade) {
+    final tint = _houseTaunts[house.id];
+    if (tint != null) return '$base $tint';
+  }
+  return base;
 }
