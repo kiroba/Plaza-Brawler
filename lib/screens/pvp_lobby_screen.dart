@@ -1,16 +1,26 @@
-// PvP lobby (slice S1): host a session or join one, on the same LAN.
-// Host shows a QR code with the pairing payload plus a 6-digit session
-// code; the guest joins with the code + host IP (in-app QR scanning lands
-// in a later slice). A successful handshake shows "Connected" — versus
-// play itself arrives in S2. Either side leaving (or the peer dropping)
-// returns both phones to the menu; single-player is untouched.
+// PvP lobby (slices S1 + S2 + S3): host a session or join one, on the
+// same LAN. Host shows a QR code with the pairing payload plus a 6-digit
+// session code; the guest joins with the code + host IP (in-app QR
+// scanning lands in a later slice). Once the S1 handshake completes, the
+// S2 start exchange swaps each side's picked fighter sign and the fight
+// runs in lockstep (lib/net/pvp_lockstep.dart). At a clean end the S3
+// result exchange (lib/net/pvp_result.dart) dual-signs the result,
+// which is then stored on the phone and shared only if match sharing is
+// on. Either side leaving (or the peer dropping) returns both phones
+// here; single-player is untouched.
 import 'package:flutter/material.dart';
 import 'package:omni_core_ui/omni_core_ui.dart' show StargateIdentity;
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../app_state.dart';
 import '../net/omni_node.dart';
+import '../net/pvp_lockstep.dart';
+import '../net/pvp_result.dart';
 import '../net/pvp_session.dart';
+import '../npc/zodiac_offline.dart';
 import 'brawler_ui.dart';
+import 'fighter_screen.dart';
+import 'game_over_screen.dart';
 
 class PvpLobbyScreen extends StatefulWidget {
   const PvpLobbyScreen({super.key});
@@ -28,6 +38,10 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen> {
   PvpSession? _session;
   bool _busy = false;
   bool _ended = false;
+
+  /// True while a lockstep match is on screen: the session's done
+  /// listener stays quiet and the match flow owns the end state.
+  bool _inMatch = false;
   String _status = '';
   String? _error;
   final _codeController = TextEditingController();
@@ -125,12 +139,12 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen> {
   void _onConnected(PvpSession session) {
     setState(() {
       _session = session;
-      _status = 'Connected — versus play arrives in the next slice (S2).';
+      _status = 'Connected — picking fighters…';
       _error = null;
       _ended = false;
     });
     session.done.then((_) {
-      if (!mounted || _session != session) return;
+      if (!mounted || _session != session || _inMatch) return;
       setState(() {
         _session = null;
         _ended = true;
@@ -138,6 +152,166 @@ class _PvpLobbyScreenState extends State<PvpLobbyScreen> {
         _status = '';
       });
     });
+    _startMatch(session);
+  }
+
+  /// The sign this phone fights as: the player's saved pick, else their
+  /// LPE profile's sign, else Aries. PvP builds both fighters from the
+  /// sign alone (offlineFighter), so both phones construct identical
+  /// fighters from the two signs and nothing else.
+  String _mySign() {
+    final picked = appState.chosenSign ?? omniNode.lpeSign;
+    if (picked != null && offlineFighter(picked) != null) return picked;
+    return 'aries';
+  }
+
+  /// S2: swap signed start messages, build the two fighters (host is
+  /// always P1, guest always P2), run the lockstep fight, then show the
+  /// normal game-over screen. S3: at a clean end, dual-sign and store
+  /// the result before the game-over screen. The session closes when the
+  /// match does — one match per session, as in S1.
+  Future<void> _startMatch(PvpSession session) async {
+    final identity = _identity;
+    if (identity == null) return;
+    final mySign = _mySign();
+    try {
+      final start = await pvpExchangeStart(
+        session: session,
+        myPubkey: identity.pubkeyHex,
+        mySign: mySign,
+        sign: identity.signBytes,
+      );
+      if (!mounted || _session != session) return;
+      final hostDef = offlineFighter(session.isHost ? mySign : start.peerSign);
+      final guestDef =
+          offlineFighter(session.isHost ? start.peerSign : mySign);
+      if (hostDef == null || guestDef == null) {
+        throw const PvpError('A fighter pick did not check out.');
+      }
+      final driver = PvpLockstep.over(session);
+      setState(() {
+        _inMatch = true;
+        _status = 'Match starting…';
+      });
+      final outcome = await Navigator.of(context).push<FightOutcome>(
+        MaterialPageRoute(
+          builder: (_) => FighterScreen(
+            config: FightConfig(
+              p1: hostDef,
+              p2: guestDef,
+              seed: start.seed,
+              mode: 'pvp',
+              lockstep: driver,
+            ),
+          ),
+        ),
+      );
+      _inMatch = false;
+      await driver.dispose();
+      if (!mounted || _session != session) return;
+      if (driver.aborted) {
+        _disposeHost();
+        await session.close();
+        if (!mounted) return;
+        setState(() {
+          _session = null;
+          _ended = true;
+          _error = driver.abortReason ?? 'The match ended early.';
+          _status = '';
+        });
+        return;
+      }
+      if (outcome == null) {
+        // Backed out of the fight screen: end the session politely.
+        await session.sendAbort('left');
+        _disposeHost();
+        await session.close();
+        if (!mounted) return;
+        setState(() {
+          _session = null;
+          _ended = true;
+          _status = '';
+        });
+        return;
+      }
+      // S3: a desync caught after the final bell still vetoes the
+      // result — nothing is stored or shared for a desynced match.
+      if (driver.desynced) {
+        _disposeHost();
+        await session.close();
+        if (!mounted) return;
+        setState(() {
+          _session = null;
+          _ended = true;
+          _error = PvpLockstep.desyncReason;
+          _status = '';
+        });
+        return;
+      }
+      // S3: both phones build the identical result payload from the
+      // session + the match summary, swap signatures, and the completed
+      // dual-signed envelope is stored on this phone (and shared only
+      // when the player's match-sharing switch is on). If the peer's
+      // signature does not cover our payload, the exchange throws and
+      // nothing is recorded.
+      final payload = pvpMatchPayload(
+        sessionId: session.sessionId,
+        seed: session.matchSeed,
+        hostPubkey: session.isHost ? identity.pubkeyHex : session.peerPubkey,
+        guestPubkey: session.isHost ? session.peerPubkey : identity.pubkeyHex,
+        hostSign: session.isHost ? mySign : start.peerSign,
+        guestSign: session.isHost ? start.peerSign : mySign,
+        summary: outcome.summary,
+      );
+      final envelope = await pvpExchangeResult(
+        session: session,
+        payload: payload,
+        sign: identity.signBytes,
+      );
+      if (!mounted || _session != session) return;
+      await appState.matchShare.sharePvpMatch(envelope.toJson());
+      if (!mounted || _session != session) return;
+      // Clean finish: the normal game-over screen, from my side's view.
+      // Its RETRY button also lands back here — a rematch is a fresh
+      // host/join in S2 (one match per session).
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => GameOverScreen(
+            won: outcome.playerWon,
+            player: session.isHost ? hostDef : guestDef,
+            opponent: session.isHost ? guestDef : hostDef,
+          ),
+        ),
+      );
+      if (!mounted || _session != session) return;
+      _disposeHost();
+      await session.close();
+      if (!mounted) return;
+      final winner = outcome.summary['winner'];
+      final mySide = session.isHost ? 'p1' : 'p2';
+      setState(() {
+        _session = null;
+        _ended = true;
+        _error = null;
+        _status = winner == 'draw'
+            ? 'The match was a draw.'
+            : winner == mySide
+                ? 'You won the match!'
+                : 'You lost the match.';
+      });
+    } on PvpError catch (e) {
+      if (!mounted || _session != session) return;
+      await session.sendAbort('start failed');
+      _disposeHost();
+      await session.close();
+      if (!mounted) return;
+      setState(() {
+        _session = null;
+        _ended = true;
+        _error = e.message;
+        _status = '';
+      });
+    }
   }
 
   Future<void> _join() async {
@@ -383,6 +557,9 @@ class _HostCard extends StatelessWidget {
         ),
       );
     }
+    // Short screens (landscape phones): a smaller QR + code so the host
+    // card fits with no scrolling. 150 dp still scans fine at arm's length.
+    final compact = MediaQuery.sizeOf(context).height < 520;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -395,7 +572,7 @@ class _HostCard extends StatelessWidget {
           child: QrImageView(
             data: payload.toQrString(),
             version: QrVersions.auto,
-            size: 200,
+            size: compact ? 150 : 200,
             backgroundColor: Colors.white,
           ),
         ),
@@ -408,9 +585,9 @@ class _HostCard extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           runningHost.sessionCode,
-          style: const TextStyle(
+          style: TextStyle(
             color: BrawlerColors.gold,
-            fontSize: 40,
+            fontSize: compact ? 32 : 40,
             fontWeight: FontWeight.w900,
             letterSpacing: 8,
           ),

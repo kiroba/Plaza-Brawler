@@ -189,7 +189,35 @@ class PvpMessage {
   static const String challenge = 'challenge';
   static const String ready = 'ready';
   static const String abort = 'abort';
-  static const Set<String> types = {hello, challenge, ready, abort};
+
+  /// S2: each side's chosen fighter sign, signed (see pvp_lockstep.dart).
+  static const String start = 'start';
+
+  /// S2: one lockstep input for a frame, with a short history window.
+  static const String input = 'input';
+
+  /// S2: asks the peer to re-send its inputs from a frame onward.
+  static const String need = 'need';
+
+  /// S3: a state-hash checkpoint for one stepped frame (see
+  /// pvp_lockstep.dart); a mismatch aborts the match as a desync.
+  static const String hash = 'hash';
+
+  /// S3: this side's signature over the result payload (see
+  /// pvp_result.dart); both signatures complete the pvp_match envelope.
+  static const String result = 'result';
+
+  static const Set<String> types = {
+    hello,
+    challenge,
+    ready,
+    abort,
+    start,
+    input,
+    need,
+    hash,
+    result,
+  };
 
   final String type;
   final String sessionId;
@@ -238,6 +266,41 @@ List<int> pvpReadyBytes(
   String guestPubkey,
 ) =>
     utf8.encode('pvp-ready|$sessionId|$hostNonce|$guestPubkey');
+
+/// The exact bytes a side signs in its S2 start message: it binds the
+/// session, both nonces (so the start belongs to this pairing), the
+/// signer's own public key, and the fighter sign it picked.
+List<int> pvpStartBytes(
+  String sessionId,
+  String hostNonce,
+  String guestNonce,
+  String pubkey,
+  String sign,
+) =>
+    utf8.encode('pvp-start|$sessionId|$hostNonce|$guestNonce|$pubkey|$sign');
+
+/// The exact bytes each side signs over an S3 result payload: the prefix
+/// plus the payload's canonical JSON. [payload] must come from
+/// pvpMatchPayload (pvp_result.dart), whose fixed key order is the
+/// canonical form — both sides build the identical map, so both sign the
+/// identical bytes, and a signature only verifies against the payload it
+/// was made over.
+List<int> pvpResultBytes(Map<String, dynamic> payload) =>
+    utf8.encode('pvp-result|${jsonEncode(payload)}');
+
+/// The agreed match seed (spec §3.4): sha256(host_nonce || guest_nonce),
+/// first 4 digest bytes as a 31-bit positive int (the range the rest of
+/// the app uses for engine seeds). Both sides derive the same value from
+/// the handshake nonces; nobody picks it.
+int pvpMatchSeed(String hostNonce, String guestNonce) {
+  final digest = sha256.convert([
+    ..._unhex(hostNonce),
+    ..._unhex(guestNonce),
+  ]).bytes;
+  final n =
+      (digest[0] << 24) | (digest[1] << 16) | (digest[2] << 8) | digest[3];
+  return n & 0x7fffffff;
+}
 
 /// Verifies an Ed25519 signature over [message] against [pubkeyHex].
 /// Returns false for malformed keys/signatures instead of throwing.
@@ -289,16 +352,33 @@ class PvpSession {
   final bool isHost;
   final String sessionId;
 
+  /// The handshake nonces (16 hex chars each). Both sides know both after
+  /// the handshake; together they agree the S2 match seed.
+  final String hostNonce;
+  final String guestNonce;
+
   PvpSession(this._socket, {
     required this.messages,
     required this.peerPubkey,
     required this.isHost,
     required this.sessionId,
+    required this.hostNonce,
+    required this.guestNonce,
   });
+
+  /// The agreed S2 match seed, derived from the two nonces (spec §3.4).
+  int get matchSeed => pvpMatchSeed(hostNonce, guestNonce);
 
   /// Completes when the socket closes for any reason (abort, peer left,
   /// network drop).
   Future<void> get done => _socket.done;
+
+  /// Sends one framed message to the peer (S2 start/input/need traffic).
+  void send(PvpMessage message) {
+    try {
+      _socket.add(message.encode());
+    } catch (_) {}
+  }
 
   Future<void> sendAbort(String reason) async {
     try {
@@ -467,6 +547,8 @@ class PvpHost {
       peerPubkey: guestPubkey,
       isHost: true,
       sessionId: payload.sessionId,
+      hostNonce: hostNonce,
+      guestNonce: guestNonce,
     );
   }
 
@@ -629,6 +711,8 @@ class PvpGuest {
         peerPubkey: hostPubkey,
         isHost: false,
         sessionId: sessionId,
+        hostNonce: hostNonce,
+        guestNonce: guestNonce,
       );
     } on PvpError {
       await _closeSocket(socket);

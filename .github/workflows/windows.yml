@@ -1,0 +1,31 @@
+name: Build Plaza Brawler Windows
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    name: Windows x64 (test build)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.47.9'
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build Windows
+        shell: bash
+        run: |
+          flutter build windows --release \
+            --dart-define=OMNI_APP=plaza-brawler \
+            --dart-define=OMNI_BUILD=$((1000 + ${{ github.run_number }}))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plaza-brawler-windows-x64
+          path: build/windows/x64/runner/Release
