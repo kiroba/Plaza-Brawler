@@ -221,6 +221,7 @@ enum FighterAction {
   special,
   hitstun,
   ko,
+  throwing,
 }
 
 /// Mutable per-tick state of one fighter. Only MatchEngine writes it; everyone else reads.
@@ -287,6 +288,9 @@ class FighterState {
   int bufBits = 0;
   int bufFrames = 0;
 
+  /// Engine frame of the last throw-button press (the throw-tech input).
+  int lastThrowPressFrame = -100;
+
   // --- match summary counters ---
   int hitsLanded = 0;
   int hitsBlocked = 0;
@@ -308,7 +312,8 @@ class FighterState {
       action == FighterAction.lp ||
       action == FighterAction.hk ||
       action == FighterAction.lk ||
-      action == FighterAction.special;
+      action == FighterAction.special ||
+      action == FighterAction.throwing;
 
   /// Resets position, HP and per-round state for a new round. Meter and match counters carry over.
   void resetForRound({required double x, required bool facingRight}) {
@@ -333,5 +338,6 @@ class FighterState {
     prevBits = 0;
     bufBits = 0;
     bufFrames = 0;
+    lastThrowPressFrame = -100;
   }
 }

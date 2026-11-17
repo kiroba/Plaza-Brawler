@@ -81,6 +81,8 @@ class HitFx {
   final bool special;
   final bool guardBreak;
   final bool ko;
+  final bool throwHit;
+  final bool throwTech;
   const HitFx({
     required this.defender,
     required this.blocked,
@@ -88,6 +90,8 @@ class HitFx {
     required this.special,
     this.guardBreak = false,
     this.ko = false,
+    this.throwHit = false,
+    this.throwTech = false,
   });
 }
 
@@ -263,6 +267,7 @@ class MatchEngine {
     for (final h in hits) {
       _apply(h);
     }
+    _resolveThrows();
     _checkRoundEnd();
   }
 
@@ -288,6 +293,8 @@ class MatchEngine {
         return Moves.hk;
       case FighterAction.lk:
         return Moves.lk;
+      case FighterAction.throwing:
+        return Moves.throwMove;
       case FighterAction.special:
         return Specials.byId(f.activeSpecial).move;
       default:
@@ -324,6 +331,7 @@ class MatchEngine {
     final bits = intent.bits;
     final pressed = bits & ~f.prevBits;
     f.prevBits = bits;
+    if (pressed & FighterIntent.throwBtn != 0) f.lastThrowPressFrame = frame;
     const bufferable =
         FighterIntent.hp |
         FighterIntent.lp |
@@ -366,6 +374,7 @@ class MatchEngine {
       case FighterAction.lp:
       case FighterAction.hk:
       case FighterAction.lk:
+      case FighterAction.throwing:
       case FighterAction.special:
         f.actionFrames++;
         final m = _moveOf(f);
@@ -453,6 +462,12 @@ class MatchEngine {
             f.meter >= Moves.meterMax &&
             f.grounded) {
           _startSpecial(f);
+          return;
+        }
+        if (wants(FighterIntent.throwBtn) && f.grounded) {
+          f.chain = 0;
+          f.airAttack = false;
+          _start(f, FighterAction.throwing);
           return;
         }
         if (f.grounded) {
@@ -612,6 +627,8 @@ class MatchEngine {
   List<_Hit> _meleeHits(int side) {
     final a = fighter(side);
     final d = fighter(1 - side);
+    // Throws never strike: they resolve in _resolveThrows, after strikes.
+    if (a.action == FighterAction.throwing) return const [];
     if (!a.isAttacking || d.isKo) return const [];
     final m = _moveOf(a);
     if (a.action == FighterAction.special &&
@@ -683,6 +700,85 @@ class MatchEngine {
     }
     projectiles.removeWhere((p) => p.life <= 0);
     return out;
+  }
+
+  /// Throws resolve after strikes, so the ruled counters all fall out naturally:
+  /// a strike that lands during throw startup has already put the thrower in
+  /// hitstun (the throw is gone), a defender already in hitstun cannot be thrown
+  /// (a throw cannot be combo'd into), an airborne defender cannot be grabbed,
+  /// and block does nothing — the throw is the turtle tax. A defender who pressed
+  /// throw within [Moves.throwTechWindow] frames of the grab connecting (or who
+  /// is throwing themselves) techs it: both reset to neutral, small pushback,
+  /// no damage.
+  void _resolveThrows() {
+    for (var side = 0; side < 2; side++) {
+      final a = fighter(side);
+      final d = fighter(1 - side);
+      if (a.action != FighterAction.throwing || a.moveHits > 0) continue;
+      const m = Moves.throwMove;
+      if (!m.isActiveAt(a.actionFrames) || !a.grounded) continue;
+      if (d.isKo || !d.grounded || d.action == FighterAction.hitstun) {
+        continue;
+      }
+      final dx = d.x - a.x;
+      final inFront = a.facingRight ? dx >= -10 : dx <= 10;
+      if (!inFront || dx.abs() > m.range) continue;
+      a.moveHits = 1; // the grab resolves once, whichever way it goes
+      final teched =
+          d.action == FighterAction.throwing ||
+          frame - d.lastThrowPressFrame <= Moves.throwTechWindow;
+      final dir = a.facingRight ? 1 : -1;
+      if (teched) {
+        a.action = FighterAction.idle;
+        a.actionFrames = 0;
+        d.action = FighterAction.idle;
+        d.actionFrames = 0;
+        d.blocking = false;
+        // The tech consumed the defender's throw press: clear its input
+        // buffer so the same press does not launch a throw once free.
+        d.bufBits = 0;
+        d.bufFrames = 0;
+        a.x = _clampX(a.x - dir * Moves.throwTechPushback);
+        d.x = _clampX(d.x + dir * Moves.throwTechPushback);
+        fx.add(
+          HitFx(
+            defender: 1 - side,
+            blocked: false,
+            heavy: false,
+            special: false,
+            throwTech: true,
+          ),
+        );
+        continue;
+      }
+      final dmg = _damage(a, m);
+      d.hp = _ci(d.hp - dmg, 0, d.maxHp);
+      a.meter = _ci(a.meter + Moves.meterOnHit, 0, Moves.meterMax);
+      a.hitsLanded++;
+      a.damageDealt += dmg;
+      d.blocking = false;
+      d.lag = 0;
+      d.chain = 0;
+      d.airAttack = false;
+      d.activeSpecial = '';
+      d.bufBits = 0;
+      d.bufFrames = 0;
+      d.action = FighterAction.hitstun;
+      d.actionFrames = 0;
+      d.stunFrames = Moves.throwStun;
+      d.x = _clampX(d.x + dir * m.knockback);
+      if (d.hp <= 0) _ko(d);
+      fx.add(
+        HitFx(
+          defender: 1 - side,
+          blocked: false,
+          heavy: true,
+          special: false,
+          throwHit: true,
+          ko: d.isKo,
+        ),
+      );
+    }
   }
 
   int _damage(FighterState a, MoveData m) =>
@@ -936,6 +1032,7 @@ class MatchEngine {
       i32(f.prevBits);
       i32(f.bufBits);
       i32(f.bufFrames);
+      i32(f.lastThrowPressFrame);
       i32(f.hitsLanded);
       i32(f.hitsBlocked);
       i32(f.specialsUsed);

@@ -29,6 +29,7 @@ class CpuBrain {
   bool _retreat = false;
   int _press = 0;
   int _blockUntil = -1;
+  int _techAt = -1;
   int _oppAttackStart = -1000;
   bool _oppAttackJudged = false;
   bool _punishTried = false;
@@ -103,6 +104,7 @@ class CpuBrain {
   FighterIntent decide(MatchSnapshot s, int side) {
     if (s.phase != MatchPhase.fight) {
       _lastPress = 0;
+      _techAt = -1;
       return FighterIntent.none;
     }
     final me = s.fighter(side);
@@ -118,6 +120,16 @@ class CpuBrain {
       _oppAttackStart = frame;
       _oppAttackJudged = false;
       _punishTried = false;
+    }
+    // Watch the opponent's throws: schedule a tech press inside the 6-frame
+    // window. Better CPUs tech more often; the press itself is just the throw
+    // button, recorded by the engine whatever state the CPU is in.
+    if (opp.action == FighterAction.throwing &&
+        opp.actionFrames == 0 &&
+        dist <= 70 &&
+        _techAt < 0 &&
+        _rng.nextDouble() < 0.15 + 0.5 * difficulty) {
+      _techAt = frame + 2 + _rng.nextInt(3);
     }
     final seen = frame - _oppAttackStart >= reactionFrames;
 
@@ -143,6 +155,11 @@ class CpuBrain {
       }
     } else if (!opp.isAttacking) {
       _blockUntil = -1;
+    }
+
+    if (frame == _techAt) {
+      bits |= FighterIntent.throwBtn;
+      _techAt = -1;
     }
 
     var press = 0;
@@ -218,8 +235,14 @@ class CpuBrain {
       }
       return;
     }
-    // In range. LP is the main poke (it chains), LK the low mix-up, HK the commit.
-    if (r < aggression * 0.40) {
+    // In range. A blocking opponent within grab range gets thrown (the
+    // turtle tax); otherwise LP is the main poke (it chains), LK the low
+    // mix-up, HK the commit.
+    if (opp.blocking &&
+        dist <= Moves.throwMove.range + 2 &&
+        r < 0.30 + 0.30 * difficulty) {
+      _press = FighterIntent.throwBtn;
+    } else if (r < aggression * 0.40) {
       _press = FighterIntent.lp;
     } else if (r < aggression * 0.55) {
       _press = FighterIntent.lk;

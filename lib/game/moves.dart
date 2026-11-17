@@ -137,6 +137,29 @@ class Moves {
   static const specialRecovery = 24;
   static const specialDamage = 22;
 
+  /// Throw (S2): 5/2/16, 10 dmg, 50 px — you must be *on* them — knockback 24.
+  /// Unblockable; resolved specially by the engine (see MatchEngine._resolveThrows),
+  /// never through the strike path, so it cannot be combo'd into.
+  static const throwMove = MoveData(
+    id: 'throw',
+    startup: 5,
+    active: 2,
+    recovery: 16,
+    damage: 10,
+    range: 50,
+    knockback: 24,
+    reachUp: 30,
+  );
+
+  /// Stun a landed throw causes: a long, knockdown-style 26 frames.
+  static const throwStun = 26;
+
+  /// A defender pressing throw within this many frames of the grab connecting techs it.
+  static const throwTechWindow = 6;
+
+  /// Pushback each fighter takes on a throw-tech, px.
+  static const throwTechPushback = 8;
+
   /// Full meter, what a special costs.
   static const meterMax = 100;
   static const meterOnHit = 8;
