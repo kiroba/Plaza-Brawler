@@ -135,31 +135,37 @@ class CpuBrain {
     if (frame <= _blockUntil &&
         (opp.isAttacking || frame <= _blockUntil - 12)) {
       bits |= FighterIntent.block;
+      // Stance: a low incoming attack is blocked crouching (the high/low rule).
+      // S1 reads the height plainly; Wit-governed misreads land with the S3 polish.
+      if (opp.isAttacking &&
+          (opp.action == FighterAction.lp || opp.action == FighterAction.lk)) {
+        bits |= FighterIntent.crouch;
+      }
     } else if (!opp.isAttacking) {
       _blockUntil = -1;
     }
 
     var press = 0;
     if (bits == 0) {
-      // Punish a whiffed heavy or special in its recovery.
+      // Punish a whiffed HK or special in its recovery.
       final whiffed =
-          (opp.action == FighterAction.heavy ||
+          (opp.action == FighterAction.hk ||
               opp.action == FighterAction.special) &&
           opp.moveHits == 0 &&
           opp.actionFrames >
-              (opp.action == FighterAction.heavy
-                  ? Moves.heavy.startup + Moves.heavy.active
+              (opp.action == FighterAction.hk
+                  ? Moves.hk.startup + Moves.hk.active
                   : Moves.specialStartup + Moves.specialActive);
-      if (whiffed && seen && !_punishTried && dist <= Moves.heavy.range) {
+      if (whiffed && seen && !_punishTried && dist <= Moves.hk.range) {
         _punishTried = true;
         if (_rng.nextDouble() < 0.45 + 0.45 * difficulty) {
-          press = FighterIntent.heavy;
+          press = FighterIntent.hk;
       }
       }
       // Anti-air: opponent jumping in.
       if (press == 0 && !opp.grounded && dist < 110 && opp.vy < 2) {
         if (_rng.nextDouble() < 0.02 + 0.10 * difficulty) {
-          press = FighterIntent.heavy;
+          press = FighterIntent.hk;
       }
       }
       // Special at full meter when in its range.
@@ -212,11 +218,13 @@ class CpuBrain {
       }
       return;
     }
-    // In range.
-    if (r < aggression * 0.55) {
-      _press = FighterIntent.light;
+    // In range. LP is the main poke (it chains), LK the low mix-up, HK the commit.
+    if (r < aggression * 0.40) {
+      _press = FighterIntent.lp;
+    } else if (r < aggression * 0.55) {
+      _press = FighterIntent.lk;
     } else if (r < aggression * 0.55 + 0.18) {
-      _press = FighterIntent.heavy;
+      _press = FighterIntent.hk;
     } else if (r < aggression * 0.55 + 0.18 + jumpiness) {
       _press = FighterIntent.up;
       _retreat = _rng.nextBool();

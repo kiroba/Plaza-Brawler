@@ -23,9 +23,9 @@ class ScriptedInput implements InputSource {
     0,
     FighterIntent.left,
     FighterIntent.right,
-    FighterIntent.right | FighterIntent.light,
-    FighterIntent.light,
-    FighterIntent.heavy,
+    FighterIntent.right | FighterIntent.hp,
+    FighterIntent.lp,
+    FighterIntent.hk,
     FighterIntent.block,
     FighterIntent.up | FighterIntent.right,
     FighterIntent.special,
@@ -38,8 +38,10 @@ class ScriptedInput implements InputSource {
     return FighterIntent(
       s.frame.isOdd
           ? _bits &
-                ~(FighterIntent.light |
-                    FighterIntent.heavy |
+                ~(FighterIntent.hp |
+                    FighterIntent.lp |
+                    FighterIntent.hk |
+                    FighterIntent.lk |
                     FighterIntent.special)
           : _bits,
     );
@@ -139,35 +141,35 @@ void main() {
   });
 
   group('hits', () {
-    test('one light attack lands exactly once (multi-hit fix)', () {
+    test('one HP attack lands exactly once (multi-hit fix)', () {
       final e = _fight('aries', 'taurus');
       final hp0 = e.p2.hp;
-      e.tickWith(const FighterIntent(FighterIntent.light), _none);
+      e.tickWith(const FighterIntent(FighterIntent.hp), _none);
       _run(e, 30);
       expect(e.p1.hitsLanded, 1);
-      expect(e.p2.hp, hp0 - _dmg(e.p1.def, Moves.light.damage));
+      expect(e.p2.hp, hp0 - _dmg(e.p1.def, Moves.hp.damage));
       expect(e.p1.meter, Moves.meterOnHit);
     });
 
-    test('holding light through all active frames still hits once', () {
+    test('holding HP through all active frames still hits once', () {
       final e = _fight('aries', 'taurus');
       final hp0 = e.p2.hp;
-      _run(e, Moves.light.total - 1, const FighterIntent(FighterIntent.light));
+      _run(e, Moves.hp.total - 1, const FighterIntent(FighterIntent.hp));
       _run(e, 20);
       expect(e.p1.hitsLanded, 1);
-      expect(e.p2.hp, hp0 - _dmg(e.p1.def, Moves.light.damage));
+      expect(e.p2.hp, hp0 - _dmg(e.p1.def, Moves.hp.damage));
     });
 
     test('a hit causes hitstun of active + 6 frames', () {
       final e = _fight('aries', 'taurus');
-      e.tickWith(const FighterIntent(FighterIntent.light), _none);
+      e.tickWith(const FighterIntent(FighterIntent.hp), _none);
       var guard = 0;
       while (e.p1.hitsLanded == 0 && guard++ < 20) {
         e.tickWith(_none, _none);
       }
       expect(e.p2.action, FighterAction.hitstun);
-      expect(e.p2.stunFrames, Moves.light.hitstun);
-      expect(Moves.light.hitstun, Moves.light.active + 6);
+      expect(e.p2.stunFrames, Moves.hp.hitstun);
+      expect(Moves.hp.hitstun, Moves.hp.active + 6);
     });
 
     test('Flare Rush lands 3 hits of 8 and costs a full meter', () {
@@ -208,7 +210,7 @@ void main() {
       const block = FighterIntent(FighterIntent.block);
       _run(e, 4, _none, block);
       final hp0 = e.p2.hp;
-      e.tickWith(const FighterIntent(FighterIntent.light), block);
+      e.tickWith(const FighterIntent(FighterIntent.hp), block);
       _run(e, 20, _none, block);
       expect(e.p1.hitsBlocked, 1);
       expect(e.p1.hitsLanded, 0);
@@ -217,7 +219,7 @@ void main() {
         hp0 -
             max(
               1,
-              (_dmg(e.p1.def, Moves.light.damage) * Moves.chipFraction).round(),
+              (_dmg(e.p1.def, Moves.hp.damage) * Moves.chipFraction).round(),
             ),
       );
       expect(e.p1.meter, Moves.meterOnBlock);
@@ -230,12 +232,18 @@ void main() {
       final start = e.frame;
       var broke = -1;
       for (var i = 0; i < 60 && broke < 0; i++) {
-        // Tap light every other tick so the chain keeps going (rising edges).
-        e.tickWith(FighterIntent(i.isEven ? FighterIntent.light : 0), block);
+        // Tap HP every other tick so the chain keeps going (rising edges).
+        e.tickWith(FighterIntent(i.isEven ? FighterIntent.hp : 0), block);
         if (e.p1.guardBreaks > 0) broke = e.frame;
       }
       expect(broke, greaterThan(0), reason: 'guard should break');
       expect(broke - start, lessThan(Moves.guardBreakWindow));
+      // The breaking hit was a fresh HP (chain 1 of 2), so a still-buffered tap
+      // would chain into the stunned defender and restart its stun — clear the
+      // attacker's buffer so the stun-length assertions below measure the break
+      // alone. (The old light version maxed its chain on the breaking hit.)
+      e.p1.bufBits = 0;
+      e.p1.bufFrames = 0;
       expect(e.p1.hitsBlocked, 3);
       expect(e.p2.action, FighterAction.hitstun);
       expect(e.p2.stunFrames, Moves.guardBreakStun);
@@ -253,7 +261,7 @@ void main() {
       _run(e, 4, _none, block);
       for (var n = 0; n < 3; n++) {
         e.p1.x = e.p2.x - 50;
-        e.tickWith(const FighterIntent(FighterIntent.light), block);
+        e.tickWith(const FighterIntent(FighterIntent.hp), block);
         _run(e, 40, _none, block);
       }
       expect(e.p1.hitsBlocked, 3);
@@ -277,13 +285,13 @@ void main() {
     });
 
     test(
-      '2 blocked lights + a blocked Flare Rush (as the 3rd) breaks the guard',
+      '2 blocked HPs + a blocked Flare Rush (as the 3rd) breaks the guard',
       () {
         final e = _fight('aries', 'taurus', x1: 200, x2: 250);
         const block = FighterIntent(FighterIntent.block);
         _run(e, 4, _none, block);
         for (var i = 0; i < 40 && e.p1.hitsBlocked < 2; i++) {
-          e.tickWith(FighterIntent(i.isEven ? FighterIntent.light : 0), block);
+          e.tickWith(FighterIntent(i.isEven ? FighterIntent.hp : 0), block);
         }
         expect(e.p1.hitsBlocked, 2);
         expect(e.p1.guardBreaks, 0);
@@ -300,7 +308,7 @@ void main() {
   group('rounds', () {
     test('round ends on the timer and the higher HP% wins', () {
       final e = _fight('aries', 'taurus');
-      e.tickWith(const FighterIntent(FighterIntent.light), _none);
+      e.tickWith(const FighterIntent(FighterIntent.hp), _none);
       var guard = 0;
       while (e.phase == MatchPhase.fight &&
           guard++ < MatchEngine.roundFrames + 10) {
@@ -442,6 +450,104 @@ void main() {
       }
       expect(run.onFightEnd(playerWon: false), RunStatus.over);
       expect(run.useContinue(), isFalse);
+    });
+  });
+
+  group('control scheme S1 (four attacks, crouch, high/low block)', () {
+    test('move table: frame data and hit heights as designed', () {
+      expect(Moves.hp.startup, 4);
+      expect(Moves.hp.damage, 6);
+      expect(Moves.hp.height, HitHeight.mid);
+      expect(Moves.hp.chainMax, 2);
+      expect(Moves.lp.startup, 3);
+      expect(Moves.lp.damage, 4);
+      expect(Moves.lp.height, HitHeight.low);
+      expect(Moves.lp.chainMax, 3);
+      expect(Moves.hk.startup, 10);
+      expect(Moves.hk.damage, 13);
+      expect(Moves.hk.height, HitHeight.mid);
+      expect(Moves.lk.startup, 7);
+      expect(Moves.lk.damage, 8);
+      expect(Moves.lk.height, HitHeight.low);
+    });
+
+    test('LP is a low: standing block does NOT stop it', () {
+      final e = _fight('aries', 'taurus', x1: 200, x2: 250);
+      const block = FighterIntent(FighterIntent.block);
+      _run(e, 4, _none, block);
+      final hp0 = e.p2.hp;
+      e.tickWith(const FighterIntent(FighterIntent.lp), block);
+      _run(e, 20, _none, block);
+      expect(e.p1.hitsLanded, 1);
+      expect(e.p1.hitsBlocked, 0);
+      expect(e.p2.hp, hp0 - _dmg(e.p1.def, Moves.lp.damage));
+    });
+
+    test('LP is a low: crouch + block DOES stop it (chip only)', () {
+      final e = _fight('aries', 'taurus', x1: 200, x2: 250);
+      const lowBlock = FighterIntent(FighterIntent.block | FighterIntent.crouch);
+      _run(e, 4, _none, lowBlock);
+      expect(e.p2.crouching, isTrue);
+      final hp0 = e.p2.hp;
+      e.tickWith(const FighterIntent(FighterIntent.lp), lowBlock);
+      _run(e, 20, _none, lowBlock);
+      expect(e.p1.hitsBlocked, 1);
+      expect(e.p1.hitsLanded, 0);
+      expect(
+        e.p2.hp,
+        hp0 -
+            max(
+              1,
+              (_dmg(e.p1.def, Moves.lp.damage) * Moves.chipFraction).round(),
+            ),
+      );
+    });
+
+    test('HP is a mid: crouch + block stops it too', () {
+      final e = _fight('aries', 'taurus', x1: 200, x2: 250);
+      const lowBlock = FighterIntent(FighterIntent.block | FighterIntent.crouch);
+      _run(e, 4, _none, lowBlock);
+      e.tickWith(const FighterIntent(FighterIntent.hp), lowBlock);
+      _run(e, 20, _none, lowBlock);
+      expect(e.p1.hitsBlocked, 1);
+      expect(e.p1.hitsLanded, 0);
+    });
+
+    test('crouch is a stance: no walking, no jumping while held', () {
+      final e = _fight('aries', 'taurus');
+      const crouchRight = FighterIntent(
+        FighterIntent.crouch | FighterIntent.right,
+      );
+      final x0 = e.p1.x;
+      _run(e, 10, crouchRight);
+      expect(e.p1.crouching, isTrue);
+      expect(e.p1.x, x0);
+      const crouchJump = FighterIntent(
+        FighterIntent.crouch | FighterIntent.up,
+      );
+      _run(e, 10, crouchJump);
+      expect(e.p1.y, 0);
+      expect(e.p1.action, isNot(FighterAction.jump));
+      _run(e, 5);
+      expect(e.p1.crouching, isFalse);
+    });
+
+    test('LP chains into itself 3 times on repeated presses', () {
+      final e = _fight('aries', 'taurus', x1: 200, x2: 250);
+      // Tap LP every other tick (rising edges); the chain restarts it in recovery.
+      for (var i = 0; i < 24; i++) {
+        e.tickWith(FighterIntent(i.isEven ? FighterIntent.lp : 0), _none);
+      }
+      expect(e.p1.hitsLanded, 3);
+    });
+
+    test('throw button is wired but inert in S1 (behaviour lands in S2)', () {
+      final e = _fight('aries', 'taurus', x1: 200, x2: 250);
+      final hp0 = e.p2.hp;
+      _run(e, 10, const FighterIntent(FighterIntent.throwBtn));
+      expect(e.p1.action, FighterAction.idle);
+      expect(e.p1.hitsLanded, 0);
+      expect(e.p2.hp, hp0);
     });
   });
 

@@ -11,10 +11,14 @@ class HowToPlayScreen extends StatelessWidget {
   static const _rows = [
     ['◀  ▶', 'Move left and right', 'A / D'],
     ['▲', 'Jump (attack in the air to hit a blocker)', 'W'],
-    ['L', 'Light punch (chain up to 3)', 'J'],
-    ['H', 'Heavy kick (slower, knocks back)', 'K'],
-    ['B', 'Block (hold). 3 blocked hits fast = guard break', 'L'],
-    ['S', 'Special (needs a full meter)', 'I / Space'],
+    ['▼', 'Crouch (hold). Low block = crouch + block', 'S'],
+    ['HP', 'High punch (chains up to 2)', 'U'],
+    ['LP', 'Low punch — fastest, chains up to 3. Block it LOW', 'J'],
+    ['HK', 'High kick — slow, big knockback, anti-air', 'I'],
+    ['LK', 'Low kick — the low poke. Block it LOW', 'K'],
+    ['B', 'Block (hold). Lows must be blocked low. 3 blocked hits fast = guard break', 'L'],
+    ['T', 'Throw — beats block at point blank (arrives in Slice 2)', 'H'],
+    ['S', 'Special (needs a full meter)', 'Space'],
   ];
 
   @override

@@ -3,13 +3,14 @@
 // feeds it normalized button/axis names from the `gamepads` package's standard model
 // (a/b/x/y, dpad*, leftStickX/Y), and this file owns the mapping to FighterIntent bits.
 //
-// Mapping v0 (existing seven intents only; no new moves, no 8-way pad):
+// Mapping v2 (control-scheme slice S1, Nov 16, 2026 — Kiro's split): the four attacks sit
+// 1:1 on the four face buttons, shoulders carry block / throw / special / crouch.
 //   dpadLeft / stick left   -> left      dpadRight / stick right -> right
-//   dpadUp / stick up       -> up (jump)
-//   a -> light   b -> heavy   x -> block   y -> special
-// Stick Y follows the gamepads normalized convention (up = +1). The exact face-button layout is
-// confirmed against a real controller in the D4 playtest reps; remapping is a one-line change
-// in [buttonMap].
+//   dpadUp / stick up       -> up (jump)   dpadDown / stick down  -> crouch
+//   y -> HP   x -> LP   b -> HK   a -> LK   (punches high on the diamond, kicks low)
+//   leftShoulder -> block   rightShoulder -> throw
+//   rightTrigger -> special   leftTrigger -> crouch
+// Stick Y follows the gamepads normalized convention (up = +1).
 import 'input.dart';
 import 'match_engine.dart';
 
@@ -17,16 +18,21 @@ class GamepadInput implements InputSource {
   /// How far the left stick must be pushed before it counts as a direction.
   static const double stickThreshold = 0.5;
 
-  /// Normalized gamepads button name -> intent bit. Buttons not listed here (bumpers, triggers,
-  /// start/back/home, dpadDown) map to nothing: v0 has no intent for them.
+  /// Normalized gamepads button name -> intent bit. Buttons not listed here
+  /// (start/back/home) map to nothing.
   static const Map<String, int> buttonMap = {
     'dpadLeft': FighterIntent.left,
     'dpadRight': FighterIntent.right,
     'dpadUp': FighterIntent.up,
-    'a': FighterIntent.light,
-    'b': FighterIntent.heavy,
-    'x': FighterIntent.block,
-    'y': FighterIntent.special,
+    'dpadDown': FighterIntent.crouch,
+    'y': FighterIntent.hp,
+    'x': FighterIntent.lp,
+    'b': FighterIntent.hk,
+    'a': FighterIntent.lk,
+    'leftShoulder': FighterIntent.block,
+    'rightShoulder': FighterIntent.throwBtn,
+    'rightTrigger': FighterIntent.special,
+    'leftTrigger': FighterIntent.crouch,
   };
 
   final Set<String> _down = {};
@@ -54,7 +60,7 @@ class GamepadInput implements InputSource {
     return true;
   }
 
-  /// Left stick only; every other axis is ignored (the right stick has no intent in v0).
+  /// Left stick only; every other axis is ignored (the right stick has no intent).
   void axis(String name, double value) {
     if (name == 'leftStickX') {
       _stickX = value;
@@ -78,6 +84,7 @@ class GamepadInput implements InputSource {
     if (_stickX <= -stickThreshold) b |= FighterIntent.left;
     if (_stickX >= stickThreshold) b |= FighterIntent.right;
     if (_stickY >= stickThreshold) b |= FighterIntent.up;
+    if (_stickY <= -stickThreshold) b |= FighterIntent.crouch;
     return b;
   }
 

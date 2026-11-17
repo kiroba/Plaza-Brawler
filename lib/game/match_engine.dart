@@ -1,5 +1,6 @@
 // Plaza Brawler match engine (spec 4.3). Pure Dart, fixed 60 Hz tick, no Flutter imports.
-// Real: movement, jump, light/heavy/block/special frame data, chip damage, guard break, meter, the four
+// Real: movement, jump, the four attacks (HP/LP/HK/LK) with the high/low block rule, crouch,
+// block/special frame data, chip damage, guard break, meter, the four
 // element specials (incl. the Undertow projectile), best-of-3 rounds with a 60 s timer, match summary
 // events and a deterministic stateBytes()/stateHash() for lockstep later.
 // Started from Gemini's match_engine.dart; numbers and hit logic were brought in line with the spec.
@@ -279,14 +280,34 @@ class MatchEngine {
 
   MoveData _moveOf(FighterState f) {
     switch (f.action) {
-      case FighterAction.light:
-        return Moves.light;
-      case FighterAction.heavy:
-        return Moves.heavy;
+      case FighterAction.hp:
+        return Moves.hp;
+      case FighterAction.lp:
+        return Moves.lp;
+      case FighterAction.hk:
+        return Moves.hk;
+      case FighterAction.lk:
+        return Moves.lk;
       case FighterAction.special:
         return Specials.byId(f.activeSpecial).move;
       default:
-        return Moves.light;
+        return Moves.hp;
+    }
+  }
+
+  /// The intent bit that starts [a] (attacks only).
+  int _intentOf(FighterAction a) {
+    switch (a) {
+      case FighterAction.hp:
+        return FighterIntent.hp;
+      case FighterAction.lp:
+        return FighterIntent.lp;
+      case FighterAction.hk:
+        return FighterIntent.hk;
+      case FighterAction.lk:
+        return FighterIntent.lk;
+      default:
+        return 0;
     }
   }
 
@@ -304,9 +325,12 @@ class MatchEngine {
     final pressed = bits & ~f.prevBits;
     f.prevBits = bits;
     const bufferable =
-        FighterIntent.light |
-        FighterIntent.heavy |
+        FighterIntent.hp |
+        FighterIntent.lp |
+        FighterIntent.hk |
+        FighterIntent.lk |
         FighterIntent.special |
+        FighterIntent.throwBtn |
         FighterIntent.up;
     if (pressed & bufferable != 0) {
       f.bufBits = pressed & bufferable;
@@ -318,6 +342,15 @@ class MatchEngine {
     final want = pressed | f.bufBits;
     bool wants(int flag) => want & flag != 0;
     final holdBlock = intent.has(FighterIntent.block);
+    // Crouch is a held stance, available whenever the fighter is grounded and free
+    // (idle/walk) or guarding (stance can switch mid-block). It pairs with block for
+    // the low block and reads as "down" for directional specials (S4).
+    final canCrouch =
+        f.grounded &&
+        (f.action == FighterAction.idle ||
+            f.action == FighterAction.walk ||
+            f.action == FighterAction.block);
+    f.crouching = canCrouch && intent.has(FighterIntent.crouch);
 
     switch (f.action) {
       case FighterAction.ko:
@@ -329,20 +362,23 @@ class MatchEngine {
           f.actionFrames = f.grounded ? 0 : Moves.jumpStartup;
         }
         return;
-      case FighterAction.light:
-      case FighterAction.heavy:
+      case FighterAction.hp:
+      case FighterAction.lp:
+      case FighterAction.hk:
+      case FighterAction.lk:
       case FighterAction.special:
         f.actionFrames++;
         final m = _moveOf(f);
         if (f.action == FighterAction.special) _specialStep(f, o);
-        // Light chain: another light during recovery restarts it, up to 3 in a row (ground only).
-        if (f.action == FighterAction.light &&
+        // Chain: the same button again during recovery restarts the move, up to the
+        // move's chainMax in a row (LP 3, HP 2; ground only).
+        if (m.chainMax > 0 &&
             !f.airAttack &&
             m.isRecoveryAt(f.actionFrames) &&
-            wants(FighterIntent.light) &&
-            f.chain < Moves.lightChain) {
+            wants(_intentOf(f.action)) &&
+            f.chain < m.chainMax) {
           f.chain++;
-          _start(f, FighterAction.light);
+          _start(f, f.action);
           return;
         }
         if (f.actionFrames >= m.total) {
@@ -390,10 +426,20 @@ class MatchEngine {
           f.y = 0.01;
           return;
         }
-        if (!f.grounded && wants(FighterIntent.light)) {
-          f.airAttack = true;
-          f.chain = 1;
-          _start(f, FighterAction.light);
+        if (!f.grounded) {
+          for (final a in const [
+            FighterAction.hk,
+            FighterAction.hp,
+            FighterAction.lk,
+            FighterAction.lp,
+          ]) {
+            if (wants(_intentOf(a))) {
+              f.airAttack = true;
+              f.chain = 1;
+              _start(f, a);
+              break;
+            }
+          }
         }
         return;
       case FighterAction.idle:
@@ -409,27 +455,32 @@ class MatchEngine {
           _startSpecial(f);
           return;
         }
-        if (wants(FighterIntent.heavy) && f.grounded) {
-          f.chain = 0;
-          _start(f, FighterAction.heavy);
-          return;
-        }
-        if (wants(FighterIntent.light)) {
-          f.chain = 1;
-          f.airAttack = !f.grounded;
-          _start(f, FighterAction.light);
-          return;
+        if (f.grounded) {
+          // Attack priority when several land on one tick: HK, HP, LK, LP.
+          for (final a in const [
+            FighterAction.hk,
+            FighterAction.hp,
+            FighterAction.lk,
+            FighterAction.lp,
+          ]) {
+            if (wants(_intentOf(a))) {
+              f.chain = 1;
+              f.airAttack = false;
+              _start(f, a);
+              return;
+            }
+          }
         }
         if (holdBlock && f.grounded) {
           _start(f, FighterAction.block);
           return;
         }
-        if (wants(FighterIntent.up) && f.grounded) {
+        if (wants(FighterIntent.up) && f.grounded && !f.crouching) {
           _start(f, FighterAction.jump);
           return;
         }
         final d = intent.dir;
-        if (d != 0 && f.grounded) {
+        if (d != 0 && f.grounded && !f.crouching) {
           f.x = _clampX(f.x + d * f.def.stats.walkSpeed);
           f.action = FighterAction.walk;
           f.actionFrames++;
@@ -514,7 +565,7 @@ class MatchEngine {
           f.action = FighterAction.idle;
           f.actionFrames = 0;
           f.lag = Moves.jumpLanding;
-        } else if (f.action == FighterAction.light && f.airAttack) {
+        } else if (f.airAttack && f.isAttacking) {
           f.action = FighterAction.idle;
           f.actionFrames = 0;
           f.airAttack = false;
@@ -598,9 +649,9 @@ class MatchEngine {
         move: m,
         dir: a.facingRight ? 1 : -1,
         originX: a.x,
-        unblockable: a.airAttack, // an air light hits a blocking opponent
+        unblockable: a.airAttack, // an air attack hits a blocking opponent
         special: a.action == FighterAction.special,
-        heavy: a.action == FighterAction.heavy,
+        heavy: a.action == FighterAction.hk,
       ),
     ];
   }
@@ -646,8 +697,16 @@ class MatchEngine {
     }
     final dmg = _damage(a, h.move);
     final facesAttacker = d.facingRight == (h.originX > d.x);
+    // The high/low rule: lows are blocked only crouching, overheads only standing,
+    // mids either way. Wrong stance = the hit lands clean.
+    final stanceOk = switch (h.move.height) {
+      HitHeight.low => d.crouching,
+      HitHeight.overhead => !d.crouching,
+      HitHeight.mid => true,
+    };
     final blocked =
         !h.unblockable &&
+        stanceOk &&
         d.blocking &&
         d.grounded &&
         d.action == FighterAction.block &&
@@ -861,6 +920,7 @@ class MatchEngine {
       i32(f.actionFrames);
       i32(f.facingRight ? 1 : 0);
       i32(f.blocking ? 1 : 0);
+      i32(f.crouching ? 1 : 0);
       i32(f.stunFrames);
       i32(f.chain);
       i32(f.moveHits);

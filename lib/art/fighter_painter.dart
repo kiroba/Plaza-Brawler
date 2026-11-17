@@ -178,8 +178,10 @@ class ArenaPainter extends CustomPainter {
       var dy = 0.0;
       if (f.action == FighterAction.walk) {
         dy = -math.sin(f.actionFrames * 0.4).abs() * 3;
-      } else if (f.action == FighterAction.light ||
-          f.action == FighterAction.heavy) {
+      } else if (f.action == FighterAction.hp ||
+          f.action == FighterAction.lp ||
+          f.action == FighterAction.hk ||
+          f.action == FighterAction.lk) {
         dx = 7;
       } else if (f.action == FighterAction.special) {
         dx = 4;
@@ -230,12 +232,14 @@ class ArenaPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final airborne = f.y > 1 || f.action == FighterAction.jump;
+    // Crouching drops the whole upper body (S1 stance pose).
+    final crouchDrop = f.crouching ? 14.0 : 0.0;
     final bob = f.action == FighterAction.walk
         ? math.sin(f.actionFrames * 0.4) * 6
         : 0.0;
 
     // Legs.
-    if (f.action == FighterAction.heavy) {
+    if (f.action == FighterAction.hk || f.action == FighterAction.lk) {
       canvas.drawLine(const Offset(0, -34), const Offset(-10, 0), leg);
       canvas.drawLine(const Offset(0, -34), const Offset(44, -30), leg); // kick
     } else if (airborne) {
@@ -249,39 +253,51 @@ class ArenaPainter extends CustomPainter {
     // Torso.
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(-14, -76, 28, 44),
+        Rect.fromLTWH(-14, -76 + crouchDrop, 28, 44),
         const Radius.circular(8),
       ),
       Paint()..color = outfit,
     );
 
-    // Arms.
+    // Arms (punch pose for HP/LP; kicks keep the guard-ish default).
     switch (f.action) {
-      case FighterAction.light:
-        canvas.drawLine(const Offset(4, -66), const Offset(42, -64), limb);
-        canvas.drawLine(const Offset(-4, -66), const Offset(-12, -46), limb);
+      case FighterAction.hp:
+      case FighterAction.lp:
+        canvas.drawLine(
+            Offset(4, -66 + crouchDrop), Offset(42, -64 + crouchDrop), limb);
+        canvas.drawLine(Offset(-4, -66 + crouchDrop),
+            Offset(-12, -46 + crouchDrop), limb);
         break;
       case FighterAction.special:
-        canvas.drawLine(const Offset(4, -66), const Offset(40, -70), limb);
-        canvas.drawLine(const Offset(-4, -66), const Offset(30, -58), limb);
-        canvas.drawCircle(const Offset(44, -68), 9, Paint()..color = aura);
+        canvas.drawLine(
+            Offset(4, -66 + crouchDrop), Offset(40, -70 + crouchDrop), limb);
+        canvas.drawLine(Offset(-4, -66 + crouchDrop),
+            Offset(30, -58 + crouchDrop), limb);
+        canvas.drawCircle(
+            Offset(44, -68 + crouchDrop), 9, Paint()..color = aura);
         break;
       case FighterAction.block:
-        canvas.drawLine(const Offset(6, -70), const Offset(18, -86), limb);
-        canvas.drawLine(const Offset(6, -58), const Offset(20, -70), limb);
+        canvas.drawLine(
+            Offset(6, -70 + crouchDrop), Offset(18, -86 + crouchDrop), limb);
+        canvas.drawLine(
+            Offset(6, -58 + crouchDrop), Offset(20, -70 + crouchDrop), limb);
         break;
       default:
-        canvas.drawLine(const Offset(4, -66), Offset(16, -44 + bob), limb);
-        canvas.drawLine(const Offset(-4, -66), Offset(-14, -44 - bob), limb);
+        canvas.drawLine(
+            Offset(4, -66 + crouchDrop), Offset(16, -44 + bob + crouchDrop),
+            limb);
+        canvas.drawLine(Offset(-4, -66 + crouchDrop),
+            Offset(-14, -44 - bob + crouchDrop), limb);
     }
 
     // Head + accessory band + eye (shows facing).
-    canvas.drawCircle(const Offset(0, -90), 13, Paint()..color = body);
+    canvas.drawCircle(Offset(0, -90 + crouchDrop), 13, Paint()..color = body);
     canvas.drawRect(
-      const Rect.fromLTWH(-13, -98, 26, 5),
+      Rect.fromLTWH(-13, -98 + crouchDrop, 26, 5),
       Paint()..color = accessory,
     );
-    canvas.drawCircle(const Offset(6, -90), 2.5, Paint()..color = Colors.black);
+    canvas.drawCircle(
+        Offset(6, -90 + crouchDrop), 2.5, Paint()..color = Colors.black);
 
     if (f.blocking) {
       canvas.drawArc(
