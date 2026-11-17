@@ -213,8 +213,10 @@ enum FighterAction {
   idle,
   walk,
   jump,
-  light,
-  heavy,
+  hp,
+  lp,
+  hk,
+  lk,
   block,
   special,
   hitstun,
@@ -249,8 +251,12 @@ class FighterState {
   bool blocking = false;
   int stunFrames = 0;
 
+  /// True while the crouch button is held and the fighter is grounded and free to
+  /// crouch. Pairs with [blocking] for the low block; part of the deterministic state.
+  bool crouching = false;
+
   // --- engine bookkeeping (part of the deterministic state) ---
-  /// Light attacks in the current chain (max 3).
+  /// Attacks in the current chain (LP max 3, HP max 2; see MoveData.chainMax).
   int chain = 0;
 
   /// Hits the current move has landed (single-hit moves stop at 1; Flare Rush at 3).
@@ -277,7 +283,7 @@ class FighterState {
   /// Previous tick's raw intent bits (for rising-edge detection).
   int prevBits = 0;
 
-  /// Buffered button presses (light/heavy/special/up) and how many frames they stay buffered.
+  /// Buffered button presses (attacks/special/up/throw) and how many frames they stay buffered.
   int bufBits = 0;
   int bufFrames = 0;
 
@@ -298,8 +304,10 @@ class FighterState {
   double get hpFraction => maxHp == 0 ? 0 : hp / maxHp;
 
   bool get isAttacking =>
-      action == FighterAction.light ||
-      action == FighterAction.heavy ||
+      action == FighterAction.hp ||
+      action == FighterAction.lp ||
+      action == FighterAction.hk ||
+      action == FighterAction.lk ||
       action == FighterAction.special;
 
   /// Resets position, HP and per-round state for a new round. Meter and match counters carry over.
@@ -313,6 +321,7 @@ class FighterState {
     action = FighterAction.idle;
     actionFrames = 0;
     blocking = false;
+    crouching = false;
     stunFrames = 0;
     chain = 0;
     moveHits = 0;

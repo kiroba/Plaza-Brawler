@@ -319,7 +319,7 @@ void main() {
           if (i < 90) return FighterIntent.none;
           if (i < 150) return const FighterIntent(FighterIntent.right);
           return i % 7 == 0
-              ? const FighterIntent(FighterIntent.light)
+              ? const FighterIntent(FighterIntent.hp)
               : FighterIntent.none;
         }
 
@@ -330,7 +330,7 @@ void main() {
           if (i < 150) return const FighterIntent(FighterIntent.left);
           if (i % 11 == 0) return const FighterIntent(FighterIntent.block);
           return i % 5 == 0
-              ? const FighterIntent(FighterIntent.heavy)
+              ? const FighterIntent(FighterIntent.hk)
               : FighterIntent.none;
         }
 

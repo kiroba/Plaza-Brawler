@@ -1,18 +1,30 @@
 // Input abstraction (spec 4.2): one FighterIntent per tick from any InputSource. Pure Dart.
-// Real: TouchInput (on-screen buttons), KeyboardInput (desktop A/D/W + J/K/L/I), CpuInput (arcade AI).
+// Real: TouchInput (on-screen buttons), KeyboardInput (desktop), CpuInput (arcade AI).
 // Stubbed: RemoteInput for player vs player over the mesh is a LATER PR (see the PvP hook below).
 import 'cpu_brain.dart';
 import 'match_engine.dart';
 
 /// What a fighter wants to do this tick, as bits (cheap to send over a socket for lockstep later).
+///
+/// The 12-intent set (Kiro's control split, Nov 16, 2026): movement, the four attacks
+/// HP/LP/HK/LK, block (stance from crouch), throw, special. HP/HK inherit the old
+/// light/heavy bit slots; the rest are new high bits — the lockstep wire mask widened
+/// to 0x7ff in the same slice.
 class FighterIntent {
   static const left = 1;
   static const right = 2;
   static const up = 4; // jump
-  static const light = 8;
-  static const heavy = 16;
+  static const hp = 8;
+  static const hk = 16;
   static const block = 32;
   static const special = 64;
+  static const lp = 128;
+  static const lk = 256;
+  static const crouch = 512;
+  static const throwBtn = 1024;
+
+  /// Every defined bit; the lockstep layer masks to this.
+  static const allBits = 0x7ff;
 
   final int bits;
   const FighterIntent(this.bits);
@@ -78,7 +90,8 @@ class TouchInput implements InputSource {
   }
 }
 
-/// Desktop keyboard: A/D or arrows to move, W/up to jump, J light, K heavy, L block, I or Space special.
+/// Desktop keyboard: A/D or arrows to move, W/up to jump, S/down to crouch,
+/// U HP, J LP, I HK, K LK, L block, H throw, Space special.
 /// Keys are plain lowercase labels so this stays Flutter-free; the fight screen maps key events.
 class KeyboardInput implements InputSource {
   final Set<String> _down = {};
@@ -91,10 +104,14 @@ class KeyboardInput implements InputSource {
     'arrow right': FighterIntent.right,
     'w': FighterIntent.up,
     'arrow up': FighterIntent.up,
-    'j': FighterIntent.light,
-    'k': FighterIntent.heavy,
+    's': FighterIntent.crouch,
+    'arrow down': FighterIntent.crouch,
+    'u': FighterIntent.hp,
+    'j': FighterIntent.lp,
+    'i': FighterIntent.hk,
+    'k': FighterIntent.lk,
     'l': FighterIntent.block,
-    'i': FighterIntent.special,
+    'h': FighterIntent.throwBtn,
     ' ': FighterIntent.special,
     'space': FighterIntent.special,
   };

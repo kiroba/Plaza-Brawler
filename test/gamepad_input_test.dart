@@ -1,7 +1,7 @@
-// Pure-Dart tests for the gamepad mapping (desktop D3): normalized button/axis names in,
-// FighterIntent bits out. No plugin, no Flutter — the bridge is a thin forwarder and is not
-// tested here; what matters is that the seven existing intents map exactly, taps latch like
-// Touch/Keyboard, and nothing else (bumpers, dpadDown, right stick) leaks into an intent.
+// Pure-Dart tests for the gamepad mapping (desktop D3; v2 in control-scheme slice S1):
+// normalized button/axis names in, FighterIntent bits out. No plugin, no Flutter — the
+// bridge is a thin forwarder and is not tested here; what matters is that the twelve
+// intents map exactly, taps latch like Touch/Keyboard, and nothing else leaks in.
 import 'package:plaza_brawler/game/gamepad_input.dart';
 import 'package:plaza_brawler/game/input.dart';
 import 'package:plaza_brawler/game/match_engine.dart';
@@ -14,15 +14,20 @@ MatchSnapshot _snap() => MatchEngine(
 ).snapshot;
 
 void main() {
-  group('button mapping (v0)', () {
+  group('button mapping (v2)', () {
     final cases = <String, int>{
-      'a': FighterIntent.light,
-      'b': FighterIntent.heavy,
-      'x': FighterIntent.block,
-      'y': FighterIntent.special,
+      'y': FighterIntent.hp,
+      'x': FighterIntent.lp,
+      'b': FighterIntent.hk,
+      'a': FighterIntent.lk,
+      'leftShoulder': FighterIntent.block,
+      'rightShoulder': FighterIntent.throwBtn,
+      'rightTrigger': FighterIntent.special,
+      'leftTrigger': FighterIntent.crouch,
       'dpadLeft': FighterIntent.left,
       'dpadRight': FighterIntent.right,
       'dpadUp': FighterIntent.up,
+      'dpadDown': FighterIntent.crouch,
     };
     cases.forEach((name, bit) {
       test('$name -> intent $bit, held until released', () {
@@ -40,12 +45,9 @@ void main() {
       for (final name in [
         'leftBumper',
         'rightBumper',
-        'leftTrigger',
-        'rightTrigger',
         'start',
         'back',
         'home',
-        'dpadDown',
       ]) {
         expect(pad.buttonDown(name), isFalse, reason: name);
       }
@@ -56,7 +58,7 @@ void main() {
       final pad = GamepadInput();
       pad.buttonDown('a');
       pad.buttonUp('a');
-      expect(pad.poll(_snap()).bits, FighterIntent.light);
+      expect(pad.poll(_snap()).bits, FighterIntent.lk);
       expect(pad.poll(_snap()).bits, 0);
     });
 
@@ -66,7 +68,7 @@ void main() {
       pad.buttonDown('a');
       expect(
         pad.poll(_snap()).bits,
-        FighterIntent.right | FighterIntent.light,
+        FighterIntent.right | FighterIntent.lk,
       );
     });
   });
@@ -89,12 +91,12 @@ void main() {
       expect(pad.poll(_snap()).bits, 0);
     });
 
-    test('up is jump; down is nothing (no crouch intent exists)', () {
+    test('up is jump; down is crouch (S1)', () {
       final pad = GamepadInput();
       pad.axis('leftStickY', 0.8);
       expect(pad.poll(_snap()).bits, FighterIntent.up);
       pad.axis('leftStickY', -0.8);
-      expect(pad.poll(_snap()).bits, 0);
+      expect(pad.poll(_snap()).bits, FighterIntent.crouch);
     });
 
     test('the right stick is ignored', () {

@@ -43,9 +43,9 @@ class _Scripted implements InputSource {
     0,
     FighterIntent.left,
     FighterIntent.right,
-    FighterIntent.right | FighterIntent.light,
-    FighterIntent.light,
-    FighterIntent.heavy,
+    FighterIntent.right | FighterIntent.hp,
+    FighterIntent.lp,
+    FighterIntent.hk,
     FighterIntent.block,
     FighterIntent.special,
   ];
@@ -55,8 +55,10 @@ class _Scripted implements InputSource {
     return FighterIntent(
       s.frame.isOdd
           ? _bits &
-                ~(FighterIntent.light |
-                    FighterIntent.heavy |
+                ~(FighterIntent.hp |
+                    FighterIntent.lp |
+                    FighterIntent.hk |
+                    FighterIntent.lk |
                     FighterIntent.special)
           : _bits,
     );

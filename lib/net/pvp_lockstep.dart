@@ -307,7 +307,7 @@ class PvpLockstep {
     }
 
     final frame = _nextSample++;
-    final bits = sampleLocal().bits & 0x7f;
+    final bits = sampleLocal().bits & FighterIntent.allBits;
     _local[frame] = bits;
     _sendInput(frame);
 
@@ -450,7 +450,7 @@ class PvpLockstep {
 
   void _recordRemote(Object? frame, Object? bits) {
     if (frame is! int || bits is! int) return;
-    if (frame < inputDelay || bits < 0 || bits > 0x7f) return;
+    if (frame < inputDelay || bits < 0 || bits > FighterIntent.allBits) return;
     // First copy wins: a conflicting re-send is a desync (S3's problem);
     // stepping on the first-seen value keeps this side deterministic.
     _remote.putIfAbsent(frame, () => bits);

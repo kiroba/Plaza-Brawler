@@ -569,7 +569,8 @@ class _SideBars extends StatelessWidget {
   }
 }
 
-/// D-pad bottom left (left, jump, right), actions bottom right (L, H, B, S). Each pad is >= 56 dp.
+/// D-pad bottom left (left, jump, crouch, right), actions bottom right: the four attacks
+/// in a 2x2 (HP HK / LP LK) with block, throw and special along the edge. Each pad is >= 56 dp.
 class _TouchPad extends StatelessWidget {
   final TouchInput input;
   final bool compact;
@@ -592,10 +593,60 @@ class _TouchPad extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         _Pad(label: '▶', flag: FighterIntent.right, input: input, size: s),
+        const SizedBox(width: 6),
+        _Pad(
+          label: '▼',
+          flag: FighterIntent.crouch,
+          input: input,
+          size: s,
+          color: Colors.blueGrey,
+        ),
         const Spacer(),
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Pad(
+                  label: 'HP',
+                  flag: FighterIntent.hp,
+                  input: input,
+                  size: s,
+                  color: BrawlerColors.cyan,
+                ),
+                const SizedBox(width: 6),
+                _Pad(
+                  label: 'HK',
+                  flag: FighterIntent.hk,
+                  input: input,
+                  size: s,
+                  color: BrawlerColors.red,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Pad(
+                  label: 'LP',
+                  flag: FighterIntent.lp,
+                  input: input,
+                  size: s,
+                  color: Colors.tealAccent,
+                ),
+                const SizedBox(width: 6),
+                _Pad(
+                  label: 'LK',
+                  flag: FighterIntent.lk,
+                  input: input,
+                  size: s,
+                  color: Colors.orange,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -608,32 +659,19 @@ class _TouchPad extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 _Pad(
+                  label: 'T',
+                  flag: FighterIntent.throwBtn,
+                  input: input,
+                  size: s,
+                  color: Colors.purple,
+                ),
+                const SizedBox(width: 6),
+                _Pad(
                   label: 'S',
                   flag: FighterIntent.special,
                   input: input,
                   size: s,
                   color: BrawlerColors.gold,
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _Pad(
-                  label: 'L',
-                  flag: FighterIntent.light,
-                  input: input,
-                  size: s,
-                  color: BrawlerColors.cyan,
-                ),
-                const SizedBox(width: 6),
-                _Pad(
-                  label: 'H',
-                  flag: FighterIntent.heavy,
-                  input: input,
-                  size: s,
-                  color: BrawlerColors.red,
                 ),
               ],
             ),

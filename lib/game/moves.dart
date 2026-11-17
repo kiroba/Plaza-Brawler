@@ -1,5 +1,12 @@
 // Move frame data (spec 4.3), 60 Hz frames. Pure Dart.
 // Real: the exact numbers the MatchEngine uses. Specials' per-element behaviour is in specials.dart.
+//
+// Control-scheme slice S1 (Nov 16, 2026): light/heavy retired for the four-attack set
+// HP / LP / HK / LK (Kiro's split). Every move carries a hit height: lows must be blocked low
+// (block while crouching), overheads standing, mids either way.
+
+/// Where a move hits, for the high/low block rule.
+enum HitHeight { low, mid, overhead }
 
 class MoveData {
   final String id;
@@ -22,6 +29,12 @@ class MoveData {
   /// How many times one use can hit (1 for everything but Flare Rush).
   final int maxHits;
 
+  /// Hit height for the block rule (specials default to mid until S4 gives them heights).
+  final HitHeight height;
+
+  /// How many times this move can chain into itself from its own recovery (LP 3, HP 2, kicks 0).
+  final int chainMax;
+
   const MoveData({
     required this.id,
     required this.startup,
@@ -32,6 +45,8 @@ class MoveData {
     this.knockback = 0,
     this.reachUp = 40,
     this.maxHits = 1,
+    this.height = HitHeight.mid,
+    this.chainMax = 0,
   });
 
   int get total => startup + active + recovery;
@@ -46,9 +61,9 @@ class MoveData {
 class Moves {
   Moves._();
 
-  /// Light (punch): 4/3/8, 6 dmg, 70 px, chains up to 3.
-  static const light = MoveData(
-    id: 'light',
+  /// HP (high punch): 4/3/8, 6 dmg, 70 px. The old light, promoted; chains up to 2. A mid.
+  static const hp = MoveData(
+    id: 'hp',
     startup: 4,
     active: 3,
     recovery: 8,
@@ -56,11 +71,28 @@ class Moves {
     range: 70,
     knockback: 4,
     reachUp: 40,
+    chainMax: 2,
   );
 
-  /// Heavy (kick): 10/4/16, 13 dmg, 85 px, knockback 20 px. Reaches higher, so it works as an anti-air.
-  static const heavy = MoveData(
-    id: 'heavy',
+  /// LP (low punch): 3/2/8, 4 dmg, 55 px. Fastest move in the game; chains up to 3
+  /// (the old light-chain lives here). A low: blocked only by a low block.
+  static const lp = MoveData(
+    id: 'lp',
+    startup: 3,
+    active: 2,
+    recovery: 8,
+    damage: 4,
+    range: 55,
+    knockback: 2,
+    reachUp: 30,
+    height: HitHeight.low,
+    chainMax: 3,
+  );
+
+  /// HK (high kick): 10/4/16, 13 dmg, 85 px, knockback 20 px. The old heavy; reaches
+  /// higher, so it works as an anti-air. A mid.
+  static const hk = MoveData(
+    id: 'hk',
     startup: 10,
     active: 4,
     recovery: 16,
@@ -70,8 +102,19 @@ class Moves {
     reachUp: 70,
   );
 
-  /// Max light attacks in one chain.
-  static const lightChain = 3;
+  /// LK (low kick): 7/3/12, 8 dmg, 75 px, knockback 10 px. The low poke.
+  /// A low: blocked only by a low block.
+  static const lk = MoveData(
+    id: 'lk',
+    startup: 7,
+    active: 3,
+    recovery: 12,
+    damage: 8,
+    range: 75,
+    knockback: 10,
+    reachUp: 30,
+    height: HitHeight.low,
+  );
 
   /// Block: 2 frames to raise, held, then [FighterStats.blockRecovery] (6 at resolve 6) to drop.
   static const blockStartup = 2;

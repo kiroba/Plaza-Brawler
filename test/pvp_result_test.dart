@@ -278,7 +278,7 @@ void main() {
           final gap = hostEngine.p2.x - hostEngine.p1.x;
           return gap > 55
               ? const FighterIntent(FighterIntent.right)
-              : const FighterIntent(FighterIntent.light);
+              : const FighterIntent(FighterIntent.hp);
         }
 
         for (var i = 0; i < 20000 && !hostEngine.isOver; i++) {
