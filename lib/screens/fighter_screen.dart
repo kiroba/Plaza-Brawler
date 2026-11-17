@@ -362,6 +362,38 @@ class _FighterScreenState extends State<FighterScreen>
                       top: 4,
                       child: _Hud(engine: _engine, run: _cfg.run),
                     ),
+                    if (!_cfg.attract && _engine.p1.combo >= 2)
+                      Positioned(
+                        left: 16,
+                        top: 76,
+                        child: Text(
+                          '${_engine.p1.combo} HITS',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD54F),
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            shadows: [
+                              Shadow(color: Colors.black87, blurRadius: 4),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (!_cfg.attract && _engine.p2.combo >= 2)
+                      Positioned(
+                        right: 16,
+                        top: 76,
+                        child: Text(
+                          '${_engine.p2.combo} HITS',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD54F),
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            shadows: [
+                              Shadow(color: Colors.black87, blurRadius: 4),
+                            ],
+                          ),
+                        ),
+                      ),
                     if (!_cfg.attract)
                       Positioned(
                         left: 8,

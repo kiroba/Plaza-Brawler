@@ -116,6 +116,35 @@ class Moves {
     height: HitHeight.low,
   );
 
+  /// One-Two (S3): the HP that finishes an LP-LP string — base damage 6 -> 9.
+  /// Selected by the engine while the attacker's finisher mark is 'one_two'.
+  static const hpOneTwo = MoveData(
+    id: 'hp_one_two',
+    startup: 4,
+    active: 3,
+    recovery: 8,
+    damage: 9,
+    range: 70,
+    knockback: 4,
+    reachUp: 40,
+  );
+
+  /// Plaza Finisher (S3): the HK that finishes an LP-LP string — startup
+  /// 10 -> 6, damage 13 -> 17, knockback 20 -> 26. The marquee string.
+  static const hkPlaza = MoveData(
+    id: 'hk_plaza',
+    startup: 6,
+    active: 4,
+    recovery: 16,
+    damage: 17,
+    range: 85,
+    knockback: 26,
+    reachUp: 70,
+  );
+
+  /// Combo score bonus banked when a combo ends, per hit past the first (S3).
+  static const comboBonusPerHit = 50;
+
   /// Block: 2 frames to raise, held, then [FighterStats.blockRecovery] (6 at resolve 6) to drop.
   static const blockStartup = 2;
 

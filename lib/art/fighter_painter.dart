@@ -157,14 +157,21 @@ class ArenaPainter extends CustomPainter {
       canvas.rotate(-0.18);
     }
 
-    // Aura glow (bigger during a special).
-    final auraR = f.action == FighterAction.special ? 62.0 : 44.0;
+    // Aura glow (bigger during a special; full element colour and size on
+    // an Elemental Finish, S3).
+    final elemental =
+        f.action == FighterAction.special && f.finisher == 'elemental';
+    final auraR = elemental
+        ? 80.0
+        : (f.action == FighterAction.special ? 62.0 : 44.0);
     canvas.drawCircle(
       const Offset(0, -48),
       auraR,
       Paint()
         ..color = aura.withValues(
-          alpha: f.action == FighterAction.special ? 0.45 : 0.18,
+          alpha: elemental
+              ? 0.85
+              : (f.action == FighterAction.special ? 0.45 : 0.18),
         )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
     );
