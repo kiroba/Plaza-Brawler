@@ -164,6 +164,35 @@ class CpuBrain {
 
     var press = 0;
     if (bits == 0) {
+      // String follow-through (S3): mid-string, keep the string going — the
+      // engine cancels LP/HP recovery into the next button, so a press now
+      // continues the combo. After two connected LPs the finisher choice
+      // follows the ruled Wit chance; at combo 3+ with a full meter, the
+      // special cancel is the Elemental Finish.
+      if ((me.action == FighterAction.lp || me.action == FighterAction.hp) &&
+          me.combo > 0) {
+        final m = me.action == FighterAction.lp ? Moves.lp : Moves.hp;
+        if (m.isRecoveryAt(me.actionFrames)) {
+          if (me.comboLpTail >= 2) {
+            final p = 0.1 + def.stats.wit * 0.05 + difficulty * 0.3;
+            if (_rng.nextDouble() < p.clamp(0.0, 0.95)) {
+              press = _rng.nextBool() ? FighterIntent.hk : FighterIntent.hp;
+            }
+          } else if (me.action == FighterAction.lp &&
+              _rng.nextDouble() <
+                  0.3 + def.stats.wit * 0.05 + difficulty * 0.2) {
+            press = FighterIntent.lp;
+          }
+        }
+      }
+      if (press == 0 &&
+          me.combo >= 3 &&
+          me.meter >= Moves.meterMax &&
+          me.isAttacking &&
+          me.action != FighterAction.special &&
+          _rng.nextDouble() < 0.5) {
+        press = FighterIntent.special;
+      }
       // Punish a whiffed HK or special in its recovery.
       final whiffed =
           (opp.action == FighterAction.hk ||

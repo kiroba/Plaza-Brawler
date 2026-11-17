@@ -19,6 +19,7 @@ class HowToPlayScreen extends StatelessWidget {
     ['B', 'Block (hold). Lows must be blocked low. 3 blocked hits fast = guard break', 'L'],
     ['T', 'Throw — unblockable at point blank; press throw as it lands to tech out', 'H'],
     ['S', 'Special (needs a full meter)', 'Space'],
+    ['LP LP HK', 'Combos: hits that land while they reel count up. LP·LP·HP is the One-Two (+3 dmg); LP·LP·HK is the Plaza Finisher — faster, harder', 'J J I'],
   ];
 
   @override

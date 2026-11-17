@@ -83,6 +83,7 @@ class HitFx {
   final bool ko;
   final bool throwHit;
   final bool throwTech;
+  final bool elementalFinish;
   const HitFx({
     required this.defender,
     required this.blocked,
@@ -92,6 +93,7 @@ class HitFx {
     this.ko = false,
     this.throwHit = false,
     this.throwTech = false,
+    this.elementalFinish = false,
   });
 }
 
@@ -248,6 +250,8 @@ class MatchEngine {
         break;
     }
 
+    p1.stunEndedTick = false;
+    p2.stunEndedTick = false;
     roundFramesLeft--;
     _face(p1, p2);
     _face(p2, p1);
@@ -268,6 +272,14 @@ class MatchEngine {
       _apply(h);
     }
     _resolveThrows();
+    // A combo ends when its defender is no longer reeling (the bonus banks).
+    for (var side = 0; side < 2; side++) {
+      final a = fighter(side);
+      final d = fighter(1 - side);
+      if (a.combo > 0 && d.action != FighterAction.hitstun && !d.isKo) {
+        _endCombo(a);
+      }
+    }
     _checkRoundEnd();
   }
 
@@ -286,11 +298,11 @@ class MatchEngine {
   MoveData _moveOf(FighterState f) {
     switch (f.action) {
       case FighterAction.hp:
-        return Moves.hp;
+        return f.finisher == 'one_two' ? Moves.hpOneTwo : Moves.hp;
       case FighterAction.lp:
         return Moves.lp;
       case FighterAction.hk:
-        return Moves.hk;
+        return f.finisher == 'plaza' ? Moves.hkPlaza : Moves.hk;
       case FighterAction.lk:
         return Moves.lk;
       case FighterAction.throwing:
@@ -316,6 +328,26 @@ class MatchEngine {
       default:
         return 0;
     }
+  }
+
+  /// Ends [a]'s running combo: banks the score bonus (+50 per hit past the
+  /// first) and clears the counter and the LP tail.
+  void _endCombo(FighterState a) {
+    if (a.combo > 1) {
+      a.comboScore += (a.combo - 1) * Moves.comboBonusPerHit;
+    }
+    a.combo = 0;
+    a.comboLpTail = 0;
+  }
+
+  /// The named-string mark for an attack started right now: after two
+  /// connected LPs, HP is the One-Two (+3 damage) and HK is the Plaza
+  /// Finisher (faster, harder). Anything else is unmarked.
+  String _armFinisher(FighterState f, FighterAction a) {
+    if (f.comboLpTail < 2) return '';
+    if (a == FighterAction.hp) return 'one_two';
+    if (a == FighterAction.hk) return 'plaza';
+    return '';
   }
 
   void _start(FighterState f, FighterAction a) {
@@ -366,6 +398,7 @@ class MatchEngine {
       case FighterAction.hitstun:
         if (f.stunFrames > 0) f.stunFrames--;
         if (f.stunFrames <= 0) {
+          f.stunEndedTick = true;
           f.action = f.grounded ? FighterAction.idle : FighterAction.jump;
           f.actionFrames = f.grounded ? 0 : Moves.jumpStartup;
         }
@@ -387,11 +420,43 @@ class MatchEngine {
             wants(_intentOf(f.action)) &&
             f.chain < m.chainMax) {
           f.chain++;
+          f.finisher = '';
           _start(f, f.action);
+          return;
+        }
+        // String cancel (S3): LP/HP recovery cancels into a different attack
+        // button — the string vocabulary (LP-LP-HP, LP-LP-HK). The finisher
+        // mark is armed from the combo tail at the cancel.
+        if (!f.airAttack &&
+            (f.action == FighterAction.lp || f.action == FighterAction.hp) &&
+            m.isRecoveryAt(f.actionFrames)) {
+          for (final a in const [
+            FighterAction.hk,
+            FighterAction.hp,
+            FighterAction.lk,
+            FighterAction.lp,
+          ]) {
+            if (a != f.action && wants(_intentOf(a))) {
+              f.finisher = _armFinisher(f, a);
+              f.chain = 1;
+              _start(f, a);
+              return;
+            }
+          }
+        }
+        // Elemental Finish (S3): a special cancelled out of an attack's
+        // recovery at combo 3+ is the finisher — presentation only.
+        if (!f.airAttack &&
+            m.isRecoveryAt(f.actionFrames) &&
+            f.combo >= 3 &&
+            wants(FighterIntent.special) &&
+            f.meter >= Moves.meterMax) {
+          _startSpecial(f);
           return;
         }
         if (f.actionFrames >= m.total) {
           f.chain = 0;
+          f.finisher = '';
           f.activeSpecial = '';
           if (f.airAttack && !f.grounded) {
             f.airAttack = false;
@@ -445,6 +510,7 @@ class MatchEngine {
             if (wants(_intentOf(a))) {
               f.airAttack = true;
               f.chain = 1;
+              f.finisher = '';
               _start(f, a);
               break;
             }
@@ -467,6 +533,7 @@ class MatchEngine {
         if (wants(FighterIntent.throwBtn) && f.grounded) {
           f.chain = 0;
           f.airAttack = false;
+          f.finisher = '';
           _start(f, FighterAction.throwing);
           return;
         }
@@ -481,6 +548,7 @@ class MatchEngine {
             if (wants(_intentOf(a))) {
               f.chain = 1;
               f.airAttack = false;
+              f.finisher = _armFinisher(f, a);
               _start(f, a);
               return;
             }
@@ -519,6 +587,8 @@ class MatchEngine {
     }
     f.activeSpecial = s.id;
     f.chain = 0;
+    // A special started at combo 3+ is an Elemental Finish (presentation only).
+    f.finisher = f.combo >= 3 ? 'elemental' : '';
     _start(f, FighterAction.special);
   }
 
@@ -751,6 +821,8 @@ class MatchEngine {
         );
         continue;
       }
+      _endCombo(a); // a throw ends any running combo, either side
+      _endCombo(d);
       final dmg = _damage(a, m);
       d.hp = _ci(d.hp - dmg, 0, d.maxHp);
       a.meter = _ci(a.meter + Moves.meterOnHit, 0, Moves.meterMax);
@@ -808,6 +880,7 @@ class MatchEngine {
         d.action == FighterAction.block &&
         facesAttacker;
     if (blocked) {
+      _endCombo(a); // a blocked hit ends the attacker's combo
       final chip = _ci((dmg * Moves.chipFraction).round(), 1, dmg);
       d.hp = _ci(d.hp - chip, 0, d.maxHp);
       a.meter = _ci(a.meter + Moves.meterOnBlock, 0, Moves.meterMax);
@@ -847,6 +920,18 @@ class MatchEngine {
     a.meter = _ci(a.meter + Moves.meterOnHit, 0, Moves.meterMax);
     a.hitsLanded++;
     a.damageDealt += dmg;
+    // Combo bookkeeping (S3): getting hit ends the defender's own combo. The
+    // attacker's counter continues while the defender is still reeling — in
+    // hitstun, or on the very tick their stun expired (they never got an
+    // actionable frame) — and restarts at 1 otherwise.
+    _endCombo(d);
+    if (d.action == FighterAction.hitstun || d.stunEndedTick) {
+      a.combo++;
+    } else {
+      a.combo = 1;
+    }
+    if (a.combo > a.bestCombo) a.bestCombo = a.combo;
+    a.comboLpTail = h.move.id == 'lp' ? a.comboLpTail + 1 : 0;
     // The hit cancels whatever the defender was doing.
     d.blocking = false;
     d.lag = 0;
@@ -877,6 +962,7 @@ class MatchEngine {
         heavy: h.heavy,
         special: h.special,
         ko: d.isKo,
+        elementalFinish: h.special && a.finisher == 'elemental',
       ),
     );
   }
@@ -904,6 +990,8 @@ class MatchEngine {
     } else {
       return;
     }
+    _endCombo(p1); // combos end on round end; the bonuses bank
+    _endCombo(p2);
     final w = winner == null ? null : fighter(winner);
     final r = RoundResult(
       round: round,
@@ -959,6 +1047,8 @@ class MatchEngine {
       'specials': f.specialsUsed,
       'guard_breaks': f.guardBreaks,
       'damage': f.damageDealt,
+      'combo_score': f.comboScore,
+      'best_combo': f.bestCombo,
     };
     return {
       'mode': mode,
@@ -1019,6 +1109,12 @@ class MatchEngine {
       i32(f.crouching ? 1 : 0);
       i32(f.stunFrames);
       i32(f.chain);
+      i32(f.combo);
+      i32(f.comboLpTail);
+      str(f.finisher);
+      i32(f.comboScore);
+      i32(f.bestCombo);
+      i32(f.stunEndedTick ? 1 : 0);
       i32(f.moveHits);
       i32(f.lastHitFrame);
       i32(f.lag);

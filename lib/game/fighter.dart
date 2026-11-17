@@ -291,12 +291,28 @@ class FighterState {
   /// Engine frame of the last throw-button press (the throw-tech input).
   int lastThrowPressFrame = -100;
 
+  /// Hits in the current running combo (as the attacker). 0 = no combo live.
+  int combo = 0;
+
+  /// Consecutive connected LPs at the tail of the current combo — the string
+  /// memory the named finishers read (two LPs arm the One-Two / Plaza Finisher).
+  int comboLpTail = 0;
+
+  /// Named-string mark on the current move: '' | 'one_two' | 'plaza' | 'elemental'.
+  String finisher = '';
+
+  /// True only on the tick the fighter's hitstun expired. They never got an
+  /// actionable frame that tick, so a hit landing then still continues a combo.
+  bool stunEndedTick = false;
+
   // --- match summary counters ---
   int hitsLanded = 0;
   int hitsBlocked = 0;
   int specialsUsed = 0;
   int guardBreaks = 0;
   int damageDealt = 0;
+  int comboScore = 0;
+  int bestCombo = 0;
 
   FighterState(this.def, {required this.x, required this.facingRight})
     : y = 0,
@@ -339,5 +355,9 @@ class FighterState {
     bufBits = 0;
     bufFrames = 0;
     lastThrowPressFrame = -100;
+    combo = 0;
+    comboLpTail = 0;
+    finisher = '';
+    stunEndedTick = false;
   }
 }
