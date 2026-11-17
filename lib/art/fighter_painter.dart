@@ -183,6 +183,8 @@ class ArenaPainter extends CustomPainter {
           f.action == FighterAction.hk ||
           f.action == FighterAction.lk) {
         dx = 7;
+      } else if (f.action == FighterAction.throwing) {
+        dx = 5;
       } else if (f.action == FighterAction.special) {
         dx = 4;
         dy = -3;
@@ -275,6 +277,13 @@ class ArenaPainter extends CustomPainter {
             Offset(30, -58 + crouchDrop), limb);
         canvas.drawCircle(
             Offset(44, -68 + crouchDrop), 9, Paint()..color = aura);
+        break;
+      case FighterAction.throwing:
+        // Both arms reach out for the grab.
+        canvas.drawLine(
+            Offset(4, -66 + crouchDrop), Offset(38, -62 + crouchDrop), limb);
+        canvas.drawLine(Offset(-4, -66 + crouchDrop),
+            Offset(30, -52 + crouchDrop), limb);
         break;
       case FighterAction.block:
         canvas.drawLine(

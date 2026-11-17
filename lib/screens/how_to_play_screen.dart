@@ -17,7 +17,7 @@ class HowToPlayScreen extends StatelessWidget {
     ['HK', 'High kick — slow, big knockback, anti-air', 'I'],
     ['LK', 'Low kick — the low poke. Block it LOW', 'K'],
     ['B', 'Block (hold). Lows must be blocked low. 3 blocked hits fast = guard break', 'L'],
-    ['T', 'Throw — beats block at point blank (arrives in Slice 2)', 'H'],
+    ['T', 'Throw — unblockable at point blank; press throw as it lands to tech out', 'H'],
     ['S', 'Special (needs a full meter)', 'Space'],
   ];
 

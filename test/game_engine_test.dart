@@ -541,13 +541,13 @@ void main() {
       expect(e.p1.hitsLanded, 3);
     });
 
-    test('throw button is wired but inert in S1 (behaviour lands in S2)', () {
+    test('throw button grabs in S2 (full suite in throw_test.dart)', () {
       final e = _fight('aries', 'taurus', x1: 200, x2: 250);
       final hp0 = e.p2.hp;
       _run(e, 10, const FighterIntent(FighterIntent.throwBtn));
-      expect(e.p1.action, FighterAction.idle);
-      expect(e.p1.hitsLanded, 0);
-      expect(e.p2.hp, hp0);
+      expect(e.p1.hitsLanded, 1);
+      expect(e.p2.hp, hp0 - _dmg(e.p1.def, Moves.throwMove.damage));
+      expect(e.p2.action, FighterAction.hitstun);
     });
   });
 
