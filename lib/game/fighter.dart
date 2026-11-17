@@ -301,6 +301,10 @@ class FighterState {
   /// Named-string mark on the current move: '' | 'one_two' | 'plaza' | 'elemental'.
   String finisher = '';
 
+  /// Frames of reinforced guard left (S4, Earth's Bulwark): while this is
+  /// positive, blocked hits deal no chip and add no guard-break credit.
+  int bulwarkFrames = 0;
+
   /// True only on the tick the fighter's hitstun expired. They never got an
   /// actionable frame that tick, so a hit landing then still continues a combo.
   bool stunEndedTick = false;
@@ -359,5 +363,6 @@ class FighterState {
     comboLpTail = 0;
     finisher = '';
     stunEndedTick = false;
+    bulwarkFrames = 0;
   }
 }

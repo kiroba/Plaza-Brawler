@@ -15,20 +15,34 @@ import 'specials.dart';
 
 enum MatchPhase { intro, fight, roundOver, matchOver }
 
-/// An Undertow projectile in flight.
+/// A special's projectile in flight (S4: Undertow, Riptide, Ebb, Fissure's
+/// ground crack, Backdraft's stationary burst). [speed] is px per tick.
 class Projectile {
   final int owner;
+  final String specialId;
   double x;
   final double y;
   final int dir;
+  final double speed;
   int life;
   Projectile({
     required this.owner,
+    required this.specialId,
     required this.x,
     required this.y,
     required this.dir,
+    required this.speed,
     required this.life,
   });
+}
+
+/// A Whirlpool zone on the ground (S4, Water down): drags the opponent
+/// toward its centre while it lasts, then bursts.
+class WhirlpoolZone {
+  final int owner;
+  double x;
+  int framesLeft;
+  WhirlpoolZone({required this.owner, required this.x, required this.framesLeft});
 }
 
 /// How one round ended.
@@ -128,6 +142,9 @@ class _Hit {
   final double pull;
   final double originX;
   final bool melee;
+
+  /// Blocked hits this hit counts as toward a guard break (Landslide: 2).
+  final int guardWeight;
   const _Hit({
     required this.attacker,
     required this.a,
@@ -140,6 +157,7 @@ class _Hit {
     this.heavy = false,
     this.pull = 0,
     this.melee = true,
+    this.guardWeight = 1,
   });
 }
 
@@ -176,6 +194,7 @@ class MatchEngine {
   final List<int> wins = [0, 0];
   final List<RoundResult> results = [];
   final List<Projectile> projectiles = [];
+  final List<WhirlpoolZone> zones = [];
 
   final List<MatchEvent> _events = [];
   final List<HitFx> fx = [];
@@ -252,6 +271,8 @@ class MatchEngine {
 
     p1.stunEndedTick = false;
     p2.stunEndedTick = false;
+    if (p1.bulwarkFrames > 0) p1.bulwarkFrames--;
+    if (p2.bulwarkFrames > 0) p2.bulwarkFrames--;
     roundFramesLeft--;
     _face(p1, p2);
     _face(p2, p1);
@@ -261,6 +282,7 @@ class MatchEngine {
     _physics(p2);
     _separate();
     _moveProjectiles();
+    _tickZones();
 
     // Collect both sides' hits against the same positions, then apply (so hits can trade).
     final hits = <_Hit>[
@@ -411,7 +433,7 @@ class MatchEngine {
       case FighterAction.special:
         f.actionFrames++;
         final m = _moveOf(f);
-        if (f.action == FighterAction.special) _specialStep(f, o);
+        if (f.action == FighterAction.special) _specialStep(f, o, _moveOf(f));
         // Chain: the same button again during recovery restarts the move, up to the
         // move's chainMax in a row (LP 3, HP 2; ground only).
         if (m.chainMax > 0 &&
@@ -451,7 +473,7 @@ class MatchEngine {
             f.combo >= 3 &&
             wants(FighterIntent.special) &&
             f.meter >= Moves.meterMax) {
-          _startSpecial(f);
+          _startSpecial(f, intent);
           return;
         }
         if (f.actionFrames >= m.total) {
@@ -527,7 +549,7 @@ class MatchEngine {
         if (wants(FighterIntent.special) &&
             f.meter >= Moves.meterMax &&
             f.grounded) {
-          _startSpecial(f);
+          _startSpecial(f, intent);
           return;
         }
         if (wants(FighterIntent.throwBtn) && f.grounded) {
@@ -575,15 +597,31 @@ class MatchEngine {
     }
   }
 
-  void _startSpecial(FighterState f) {
+  /// The direction held with a special press, relative to the fighter's
+  /// facing: crouch = 'down', toward the opponent = 'forward', away = 'back'.
+  String _specialDir(FighterState f, FighterIntent intent) {
+    if (intent.has(FighterIntent.crouch)) return 'down';
+    final fwd = f.facingRight ? FighterIntent.right : FighterIntent.left;
+    final back = f.facingRight ? FighterIntent.left : FighterIntent.right;
+    if (intent.has(fwd)) return 'forward';
+    if (intent.has(back)) return 'back';
+    return 'neutral';
+  }
+
+  void _startSpecial(FighterState f, FighterIntent intent) {
     f.meter -= Moves.meterMax;
     f.specialsUsed++;
     final SpecialDef s;
     if (f.def.isBoss) {
-      s = Specials.all[f.specialCursor % Specials.all.length];
+      // The boss cycles elements AND directions — all sixteen.
+      s = Specials.bossCycle[f.specialCursor % Specials.bossCycle.length];
       f.specialCursor++;
     } else {
-      s = Specials.byId(f.def.specialId);
+      s = Specials.directional(f.def.element, _specialDir(f, intent));
+    }
+    if (s.kind == SpecialKind.teleportEscape) {
+      // Slipstream refunds 20 (net cost 80).
+      f.meter = _ci(f.meter + 20, 0, Moves.meterMax);
     }
     f.activeSpecial = s.id;
     f.chain = 0;
@@ -592,48 +630,113 @@ class MatchEngine {
     _start(f, FighterAction.special);
   }
 
-  void _specialStep(FighterState f, FighterState o) {
+  void _teleportBeside(FighterState f, FighterState o, {required bool front}) {
+    final dirSign = o.facingRight ? 1 : -1; // the opponent's facing
+    final spot = front ? o.x + dirSign * 55 : o.x - dirSign * 55;
+    f.x = _clampX(spot);
+    f.facingRight = o.x > f.x;
+  }
+
+  void _specialStep(FighterState f, FighterState o, MoveData m) {
     final s = Specials.byId(f.activeSpecial);
-    final m = s.move;
+    final side = f == p1 ? 0 : 1;
     switch (s.kind) {
-      case SpecialKind.teleportHeavy:
-        if (f.actionFrames == m.startup) {
-          final side = f.x <= o.x
-              ? 1
-              : -1; // attacker is left of the opponent -> land on its right
-          var nx = o.x + side * 50;
-          if (nx < minX || nx > maxX) nx = o.x - side * 50;
+      case SpecialKind.dashMultiHit:
+        // Flare Rush / Landslide: dash toward the opponent over the active
+        // frames, stopping at striking distance (the hits land via _meleeHits).
+        if (m.isActiveAt(f.actionFrames) && f.grounded) {
+          final dir = f.facingRight ? 1.0 : -1.0;
+          var nx = f.x + dir * s.dashDistance / m.active;
+          final stop = o.x - dir * (minSpacing + 4);
+          nx = dir > 0 ? (nx > stop ? stop : nx) : (nx < stop ? stop : nx);
           f.x = _clampX(nx);
+        }
+      case SpecialKind.teleportHeavy:
+        // Gale Step: at the end of startup, appear behind the opponent.
+        if (f.actionFrames == m.startup) {
+          final behind = o.facingRight ? o.x - 48 : o.x + 48;
+          f.x = _clampX(behind);
           f.facingRight = o.x > f.x;
         }
-        break;
-      case SpecialKind.dashMultiHit:
-        if (m.isActiveAt(f.actionFrames)) {
-          final step = s.dashDistance / m.active;
-          final dir = f.facingRight ? 1 : -1;
-          var nx = f.x + dir * step;
-          final stop = o.x - dir * minSpacing;
-          if (dir > 0 && f.x <= stop && nx > stop) nx = stop;
-          if (dir < 0 && f.x >= stop && nx < stop) nx = stop;
-          f.x = _clampX(nx);
-        }
-        break;
       case SpecialKind.projectilePull:
-        if (f.actionFrames == m.startup) {
-          final dir = f.facingRight ? 1 : -1;
+      case SpecialKind.groundCrack:
+        // Undertow / Riptide / Ebb / Fissure: spawn the projectile as the
+        // active frames begin (one projectile in flight at a time, as today).
+        if (f.actionFrames == m.startup && projectiles.isEmpty) {
           projectiles.add(
             Projectile(
-              owner: f == p1 ? 0 : 1,
-              x: f.x + dir * 30,
-              y: 30,
-              dir: dir,
+              owner: side,
+              specialId: s.id,
+              x: f.x + (f.facingRight ? 30 : -30),
+              // The crack's draw offset puts it on the ground line.
+              y: s.kind == SpecialKind.groundCrack ? -34 : 30,
+              dir: f.facingRight ? 1 : -1,
+              speed: s.projectileSpeed,
               life: s.projectileLife,
             ),
           );
         }
-        break;
+      case SpecialKind.dashBackBurst:
+        // Backdraft: the burst is left at the start point on frame 1; the
+        // caster retreats 120 px over the startup+active window.
+        if (f.actionFrames == 1 && projectiles.isEmpty) {
+          projectiles.add(
+            Projectile(
+              owner: side,
+              specialId: s.id,
+              x: f.x,
+              y: 30,
+              dir: f.facingRight ? 1 : -1,
+              speed: 0,
+              life: s.projectileLife,
+            ),
+          );
+        }
+        if (f.actionFrames <= m.startup + m.active) {
+          f.x = _clampX(f.x - (f.facingRight ? 6 : -6));
+        }
+      case SpecialKind.leapStrike:
+        // Blaze Arc: launch on frame 1; gravity flies the arc, the strike
+        // itself resolves through _meleeHits as an overhead.
+        if (f.actionFrames == 1) {
+          f.vy = 8.5;
+          f.vx = f.facingRight ? 3.0 : -3.0;
+        }
+      case SpecialKind.bulwark:
+        if (f.actionFrames == 1) f.bulwarkFrames = 30;
+      case SpecialKind.teleportStrike2:
+        // Crosswind: strike in front at startup's end, then — once the first
+        // hit has landed and the spacing has passed — again from behind.
+        if (f.actionFrames == m.startup) {
+          _teleportBeside(f, o, front: true);
+        }
+        if (f.moveHits == 1 &&
+            f.actionFrames == f.lastHitFrame + s.hitSpacing) {
+          _teleportBeside(f, o, front: false);
+        }
+      case SpecialKind.teleportEscape:
+        // Slipstream: at startup's end, appear at max range from the opponent.
+        if (f.actionFrames == m.startup) {
+          f.x = o.x <= arenaWidth / 2 ? maxX : minX;
+          f.facingRight = o.x > f.x;
+        }
+      case SpecialKind.teleportDrop:
+        // Downburst: at startup's end, appear above the opponent and drop;
+        // the strike resolves through _meleeHits as an overhead.
+        if (f.actionFrames == m.startup) {
+          f.x = _clampX(o.x);
+          f.y = 55;
+          f.vy = -3;
+          f.vx = 0;
+          f.facingRight = !o.facingRight;
+        }
+      case SpecialKind.zone:
+        // Whirlpool: the zone opens at the caster's feet as active begins.
+        if (f.actionFrames == m.startup) {
+          zones.add(WhirlpoolZone(owner: side, x: f.x, framesLeft: 30));
+        }
       case SpecialKind.shockwave:
-        break;
+        break; // Quake Stomp / Scorch Fan: the hit itself is the whole effect.
     }
   }
 
@@ -682,10 +785,45 @@ class MatchEngine {
 
   void _moveProjectiles() {
     for (final p in projectiles) {
-      p.x += p.dir * Specials.undertow.projectileSpeed;
+      p.x += p.dir * p.speed;
       p.life--;
     }
     projectiles.removeWhere((p) => p.life <= 0 || p.x < 0 || p.x > arenaWidth);
+  }
+
+  /// Whirlpool zones (S4): drag a grounded opponent inside the radius toward
+  /// the centre at 3 px/tick; on expiry, burst for the move's damage if the
+  /// opponent is still inside.
+  void _tickZones() {
+    if (zones.isEmpty) return;
+    for (final z in List.of(zones)) {
+      final a = z.owner == 0 ? p1 : p2;
+      final d = z.owner == 0 ? p2 : p1;
+      if (!d.isKo && d.grounded && (d.x - z.x).abs() <= 50) {
+        final delta = z.x - d.x;
+        d.x = _clampX(d.x + (delta.abs() <= 3 ? delta : (delta > 0 ? 3.0 : -3.0)));
+      }
+      z.framesLeft--;
+      if (z.framesLeft <= 0) {
+        zones.remove(z);
+        if (!d.isKo && (d.x - z.x).abs() <= 50) {
+          final s = Specials.whirlpool;
+          _apply(
+            _Hit(
+              attacker: z.owner,
+              a: a,
+              d: d,
+              move: s.move,
+              dir: d.x >= z.x ? 1 : -1,
+              originX: z.x,
+              special: true,
+              melee: false,
+              guardWeight: s.move.guardWeight,
+            ),
+          );
+        }
+      }
+    }
   }
 
   static int _ci(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
@@ -701,13 +839,24 @@ class MatchEngine {
     if (a.action == FighterAction.throwing) return const [];
     if (!a.isAttacking || d.isKo) return const [];
     final m = _moveOf(a);
-    if (a.action == FighterAction.special &&
-        Specials.byId(a.activeSpecial).kind == SpecialKind.projectilePull) {
-      return const []; // Undertow hits through its projectile only.
+    final activeDef = a.action == FighterAction.special
+        ? Specials.byId(a.activeSpecial)
+        : null;
+    // Specials that hit through other channels (projectiles, zones, pure
+    // movement or defence) never strike through the melee path.
+    if (activeDef != null &&
+        (activeDef.kind == SpecialKind.projectilePull ||
+            activeDef.kind == SpecialKind.groundCrack ||
+            activeDef.kind == SpecialKind.dashBackBurst ||
+            activeDef.kind == SpecialKind.bulwark ||
+            activeDef.kind == SpecialKind.teleportEscape ||
+            activeDef.kind == SpecialKind.zone)) {
+      return const [];
     }
-    // The multi-hit fix: one hit per move use, except Flare Rush (3 hits, hitSpacing frames apart).
+    // The multi-hit fix: one hit per move use, except multi-hit specials
+    // (Flare Rush 3, Crosswind 2), hitSpacing frames apart.
     if (a.moveHits >= m.maxHits) return const [];
-    const spacing = Specials.flareRushHitSpacing;
+    final spacing = activeDef?.hitSpacing ?? Specials.flareRushHitSpacing;
     if (m.maxHits > 1 && a.actionFrames - a.lastHitFrame < spacing) {
       return const [];
   }
@@ -739,6 +888,7 @@ class MatchEngine {
         unblockable: a.airAttack, // an air attack hits a blocking opponent
         special: a.action == FighterAction.special,
         heavy: a.action == FighterAction.hk,
+        guardWeight: m.guardWeight,
       ),
     ];
   }
@@ -747,22 +897,26 @@ class MatchEngine {
     final out = <_Hit>[];
     for (final p in projectiles) {
       if (p.life <= 0) continue;
+      final s = Specials.byId(p.specialId);
       final a = fighter(p.owner);
       final d = fighter(1 - p.owner);
       if (d.isKo) continue;
-      if ((p.x - d.x).abs() <= Specials.undertow.move.range &&
-          d.y <= Specials.undertow.move.reachUp) {
+      // Fissure's crack runs along the ground: it whiffs airborne completely.
+      final heightOk =
+          s.kind == SpecialKind.groundCrack ? d.grounded : d.y <= s.move.reachUp;
+      if ((p.x - d.x).abs() <= s.move.range && heightOk) {
         out.add(
           _Hit(
             attacker: p.owner,
             a: a,
             d: d,
-            move: Specials.undertow.move,
+            move: s.move,
             dir: p.dir,
             originX: p.x - p.dir * 10,
             special: true,
-            pull: Specials.undertow.pull,
+            pull: s.pull,
             melee: false,
+            guardWeight: s.move.guardWeight,
           ),
         );
         p.life = 0;
@@ -881,7 +1035,9 @@ class MatchEngine {
         facesAttacker;
     if (blocked) {
       _endCombo(a); // a blocked hit ends the attacker's combo
-      final chip = _ci((dmg * Moves.chipFraction).round(), 1, dmg);
+      // Bulwark (S4): reinforced guard takes no chip at all.
+      final bulwarked = d.bulwarkFrames > 0;
+      final chip = bulwarked ? 0 : _ci((dmg * Moves.chipFraction).round(), 1, dmg);
       d.hp = _ci(d.hp - chip, 0, d.maxHp);
       a.meter = _ci(a.meter + Moves.meterOnBlock, 0, Moves.meterMax);
       a.hitsBlocked++;
@@ -893,8 +1049,16 @@ class MatchEngine {
           h.melee && h.move.maxHits > 1 && a.moveHits > 1;
       d.blockedAt.removeWhere((t) => frame - t >= Moves.guardBreakWindow);
       var broke = false;
-      if (!followUpOfSameMove) d.blockedAt.add(frame);
-      if (!followUpOfSameMove && d.blockedAt.length >= Moves.guardBreakHits) {
+      // Bulwark also accumulates no guard-break credit; a heavy guard weight
+      // (Landslide) records its hit more than once.
+      if (!bulwarked && !followUpOfSameMove) {
+        for (var i = 0; i < h.guardWeight; i++) {
+          d.blockedAt.add(frame);
+        }
+      }
+      if (!bulwarked &&
+          !followUpOfSameMove &&
+          d.blockedAt.length >= Moves.guardBreakHits) {
         d.blockedAt.clear();
         d.blocking = false;
         d.lag = 0;
@@ -942,7 +1106,7 @@ class MatchEngine {
     d.bufFrames = 0;
     d.action = FighterAction.hitstun;
     d.actionFrames = 0;
-    d.stunFrames = h.move.hitstun;
+    d.stunFrames = h.move.hitstun + h.move.stunBonus;
     if (h.pull > 0) {
       // Undertow pulls toward the caster, never past it.
       final toward = a.x > d.x ? 1 : -1;
@@ -1004,6 +1168,7 @@ class MatchEngine {
     results.add(r);
     if (winner != null) wins[winner]++;
     projectiles.clear();
+    zones.clear();
     _events.add(
       MatchEvent('FIGHTER_ROUND_END', {
         'mode': mode,
@@ -1134,14 +1299,23 @@ class MatchEngine {
       i32(f.specialsUsed);
       i32(f.guardBreaks);
       i32(f.damageDealt);
+      i32(f.bulwarkFrames);
     }
     i32(projectiles.length);
     for (final p in projectiles) {
       i32(p.owner);
+      str(p.specialId);
       f64(p.x);
       f64(p.y);
       i32(p.dir);
+      f64(p.speed);
       i32(p.life);
+    }
+    i32(zones.length);
+    for (final z in zones) {
+      i32(z.owner);
+      f64(z.x);
+      i32(z.framesLeft);
     }
     return b.toBytes();
   }

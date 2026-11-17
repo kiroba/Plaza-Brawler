@@ -243,6 +243,18 @@ class CpuBrain {
     // Buttons must be released for a tick between presses (the engine reads rising edges).
     if (press != 0 && press == _lastPress) press = 0;
     _lastPress = press;
+    // S4: a special press picks a direction, like a player's would — mostly
+    // forward (the aggressive expression), sometimes down or back.
+    if (press == FighterIntent.special) {
+      final r = _rng.nextDouble();
+      if (r < 0.45) {
+        bits |= toward;
+      } else if (r < 0.65) {
+        bits |= FighterIntent.crouch;
+      } else if (r < 0.80) {
+        bits |= away;
+      }
+    }
     return FighterIntent(bits | press);
   }
 

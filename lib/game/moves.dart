@@ -26,6 +26,14 @@ class MoveData {
   /// Highest target height (px above ground) a grounded version of this move reaches.
   final double reachUp;
 
+  /// Extra hitstun frames on a clean hit, past the standard active+6
+  /// (S4: Scorch Fan's +6 — the combo-starter special).
+  final int stunBonus;
+
+  /// How many blocked hits this move counts as toward a guard break
+  /// (S4: Earth's Landslide counts as 2; everything else 1).
+  final int guardWeight;
+
   /// How many times one use can hit (1 for everything but Flare Rush).
   final int maxHits;
 
@@ -47,6 +55,8 @@ class MoveData {
     this.maxHits = 1,
     this.height = HitHeight.mid,
     this.chainMax = 0,
+    this.stunBonus = 0,
+    this.guardWeight = 1,
   });
 
   int get total => startup + active + recovery;

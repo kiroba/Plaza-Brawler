@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 
 import '../game/fighter.dart';
 import '../game/match_engine.dart';
+import '../game/specials.dart';
 
 /// Draws the arena, both fighters, projectiles and hit flashes for one [MatchEngine] frame.
 class ArenaPainter extends CustomPainter {
@@ -21,6 +22,12 @@ class ArenaPainter extends CustomPainter {
   /// Screen shake offset in arena px.
   final Offset shake;
 
+  /// Element spark bursts (S4): frames left and tint per side, set by the
+  /// screen when a basic (non-special) hit lands — the defender sparks in a
+  /// faint tint of the ATTACKER's element.
+  final List<int> sparkFrames;
+  final List<Color> sparkColors;
+
   /// Decoded three-quarter pack sprites by asset path, for fighters whose
   /// def carries a sprite binding. A missing entry paints the fighter as
   /// before, so a sprite that fails to load never breaks a match.
@@ -31,6 +38,8 @@ class ArenaPainter extends CustomPainter {
     required this.flash,
     this.shake = Offset.zero,
     this.spriteImages = const {},
+    this.sparkFrames = const [0, 0],
+    this.sparkColors = const [Colors.white, Colors.white],
   }) : super();
 
   static const double _groundFrac = 0.82;
@@ -53,9 +62,34 @@ class ArenaPainter extends CustomPainter {
     canvas.scale(scale);
     _background(canvas);
   const groundY = MatchEngine.arenaHeight * _groundFrac;
+    for (final z in engine.zones) {
+      canvas.drawCircle(
+        Offset(z.x, groundY - 4),
+        50,
+        Paint()..color = const Color(0xFF4CC9F0).withValues(alpha: 0.18),
+      );
+      canvas.drawCircle(
+        Offset(z.x, groundY - 4),
+        30,
+        Paint()..color = const Color(0xFF4CC9F0).withValues(alpha: 0.30),
+      );
+    }
     for (final p in engine.projectiles) {
+      final def = Specials.byId(p.specialId);
+      final color = Color(Specials.colorOf(def.element));
+      if (def.kind == SpecialKind.groundCrack) {
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(p.x, groundY - 3),
+            width: 40,
+            height: 9,
+          ),
+          Paint()..color = color,
+        );
+        continue;
+      }
       final paint = Paint()
-        ..color = const Color(0xFF4CC9F0)
+        ..color = color
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
       canvas.drawCircle(Offset(p.x, groundY - p.y - 40), 12, paint);
       canvas.drawCircle(
@@ -82,6 +116,18 @@ class ArenaPainter extends CustomPainter {
           ? null
           : spriteImages[engine.p1.def.sprite!.bodyAsset],
     );
+    for (var side = 0; side < 2; side++) {
+      if (side >= sparkFrames.length || sparkFrames[side] <= 0) continue;
+      final f = side == 0 ? engine.p1 : engine.p2;
+      final alpha = (sparkFrames[side] / 5).clamp(0.0, 1.0);
+      final paint = Paint()
+        ..color = sparkColors[side].withValues(alpha: 0.75 * alpha)
+        ..strokeWidth = 2.5;
+      final cx = f.x, cy = groundY - f.y - 72;
+      canvas.drawLine(Offset(cx - 4, cy), Offset(cx - 16, cy - 9), paint);
+      canvas.drawLine(Offset(cx + 3, cy - 4), Offset(cx + 15, cy - 14), paint);
+      canvas.drawLine(Offset(cx, cy + 3), Offset(cx + 10, cy + 12), paint);
+    }
     canvas.restore();
   }
 

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../art/fighter_painter.dart';
 import '../game/fighter.dart';
+import '../game/specials.dart';
 import '../npc/omnimind.dart';
 import '../npc/zodiac_offline.dart';
 import 'brawler_ui.dart';
@@ -69,6 +70,16 @@ class _VersusSplashState extends State<VersusSplash> {
         Text(
           f.signTitle,
           style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        Text(
+          f.isBoss
+              ? 'ALL ELEMENTS'
+              : '${f.element.toUpperCase()} — ${Specials.forElement(f.element).name}',
+          style: TextStyle(
+            color: Color(Specials.colorOf(f.element)),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 4),
         SourceChip(

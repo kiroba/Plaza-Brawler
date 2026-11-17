@@ -22,6 +22,7 @@ import '../game/gamepad_input.dart';
 import '../game/hit_feel.dart';
 import '../game/input.dart';
 import '../game/match_engine.dart';
+import '../game/specials.dart';
 import '../input/gamepad_bridge.dart';
 import '../net/omni_node.dart';
 import '../net/pvp_lockstep.dart';
@@ -98,6 +99,12 @@ class _FighterScreenState extends State<FighterScreen>
   bool _paused = false;
   bool _ended = false;
   final List<int> _flash = [0, 0];
+  final List<int> _sparkFrames = [0, 0];
+  final List<Color> _sparkColors = [Colors.white, Colors.white];
+  String _bannerText = '';
+  Color _bannerColor = Colors.white;
+  int _bannerFrames = 0;
+  final List<String> _lastSpecial = ['', ''];
 
   /// Decoded pack sprites by asset path for fighters wearing a pack binding.
   final Map<String, ui.Image> _spriteImages = {};
@@ -236,10 +243,28 @@ class _FighterScreenState extends State<FighterScreen>
   void _afterStep() {
     for (var s = 0; s < 2; s++) {
       if (_flash[s] > 0) _flash[s]--;
+      if (_sparkFrames[s] > 0) _sparkFrames[s]--;
+      // A special activating raises its name banner in its element colour.
+      final cur = _engine.fighter(s).activeSpecial;
+      if (cur.isNotEmpty && cur != _lastSpecial[s]) {
+        final def = Specials.byId(cur);
+        _bannerText = def.name.toUpperCase();
+        _bannerColor = Color(Specials.colorOf(def.element));
+        _bannerFrames = 50;
+      }
+      _lastSpecial[s] = cur;
     }
+    if (_bannerFrames > 0) _bannerFrames--;
     for (final fx in _engine.fx) {
       if (fx.defender >= 0 && fx.defender < 2) {
         _flash[fx.defender] = fx.blocked ? 3 : 6;
+        // Basic hits spark in the attacker's element tint (S4).
+        if (!fx.special && !fx.blocked && !fx.throwHit && !fx.throwTech) {
+          _sparkFrames[fx.defender] = 5;
+          _sparkColors[fx.defender] = Color(
+            Specials.colorOf(_engine.fighter(1 - fx.defender).def.element),
+          );
+        }
     }
       if (fx.heavy || fx.special || fx.ko || fx.guardBreak) {
         _shakeFrames = 7; // ~120 ms
@@ -353,6 +378,8 @@ class _FighterScreenState extends State<FighterScreen>
                           flash: _flash,
                           shake: shake,
                           spriteImages: _spriteImages,
+                          sparkFrames: _sparkFrames,
+                          sparkColors: _sparkColors,
                         ),
                       ),
                     ),
@@ -362,6 +389,26 @@ class _FighterScreenState extends State<FighterScreen>
                       top: 4,
                       child: _Hud(engine: _engine, run: _cfg.run),
                     ),
+                    if (_bannerFrames > 0)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 118,
+                        child: Center(
+                          child: Text(
+                            _bannerText,
+                            style: TextStyle(
+                              color: _bannerColor,
+                              fontSize: 27,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 3,
+                              shadows: const [
+                                Shadow(color: Colors.black87, blurRadius: 6),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     if (!_cfg.attract && _engine.p1.combo >= 2)
                       Positioned(
                         left: 16,
