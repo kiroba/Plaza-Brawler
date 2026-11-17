@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../art/fighter_painter.dart';
 import '../audio/sfx.dart';
 import '../game/fighter.dart';
+import '../game/specials.dart';
 import '../npc/houses.dart';
 import '../npc/zodiac_offline.dart';
 import '../net/omni_node.dart';
@@ -305,6 +306,22 @@ class _DetailPanel extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: accent,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ),
+          if (def.source != 'plaza')
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                def.isBoss
+                    ? 'ALL ELEMENTS'
+                    : '${def.element.toUpperCase()} — ${Specials.forElement(def.element).name}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(Specials.colorOf(def.element)),
                   fontSize: 12.5,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.6,

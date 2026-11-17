@@ -20,6 +20,7 @@ class HowToPlayScreen extends StatelessWidget {
     ['T', 'Throw — unblockable at point blank; press throw as it lands to tech out', 'H'],
     ['S', 'Special (needs a full meter)', 'Space'],
     ['LP LP HK', 'Combos: hits that land while they reel count up. LP·LP·HP is the One-Two (+3 dmg); LP·LP·HK is the Plaza Finisher — faster, harder', 'J J I'],
+    ['S + ▶/◀/▼', 'Special + direction: a different elemental ability — forward, back, or down. Sixteen across the four elements', 'Space + dir'],
   ];
 
   @override
