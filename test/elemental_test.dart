@@ -18,7 +18,6 @@ const _spD = FighterIntent(FighterIntent.special | FighterIntent.crouch);
 const _block = FighterIntent(FighterIntent.block);
 const _blockLow = FighterIntent(FighterIntent.block | FighterIntent.crouch);
 const _hp = FighterIntent(FighterIntent.hp);
-const _lp = FighterIntent(FighterIntent.lp);
 
 FighterDef _f(String sign) => offlineFighter(sign)!;
 
