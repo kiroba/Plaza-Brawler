@@ -807,7 +807,7 @@ class MatchEngine {
       if (z.framesLeft <= 0) {
         zones.remove(z);
         if (!d.isKo && (d.x - z.x).abs() <= 50) {
-          final s = Specials.whirlpool;
+          const s = Specials.whirlpool;
           _apply(
             _Hit(
               attacker: z.owner,
