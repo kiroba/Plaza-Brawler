@@ -154,11 +154,17 @@ class _TitleScreenState extends State<TitleScreen> {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: BrawlerColors.cyan, width: 2),
                 ),
-                child: const FittedBox(
+                child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Column(
                     children: [
-                      Text(
+                      Image.asset(
+                        'assets/images/omnibrawler_logo.png',
+                        width: compact ? 76 : 150,
+                        height: compact ? 76 : 150,
+                      ),
+                      SizedBox(height: compact ? 6 : 10),
+                      const Text(
                         'OMNIBRAWLER',
                         style: TextStyle(
                           fontSize: 34,
@@ -167,8 +173,8 @@ class _TitleScreenState extends State<TitleScreen> {
                           letterSpacing: 2,
                         ),
                       ),
-                      SizedBox(height: 4),
-                      Text(
+                      const SizedBox(height: 4),
+                      const Text(
                         'Beat the 12 signs. Then face the 13th.',
                         style: TextStyle(
                           fontSize: 12,
