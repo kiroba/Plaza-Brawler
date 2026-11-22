@@ -160,8 +160,8 @@ class _TitleScreenState extends State<TitleScreen> {
                     children: [
                       Image.asset(
                         'assets/images/omnibrawler_logo.png',
-                        width: compact ? 76 : 150,
-                        height: compact ? 76 : 150,
+                        width: compact ? 52 : 150,
+                        height: compact ? 52 : 150,
                       ),
                       SizedBox(height: compact ? 6 : 10),
                       const Text(
@@ -182,6 +182,8 @@ class _TitleScreenState extends State<TitleScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      SizedBox(height: compact ? 6 : 8),
+                      const PreAlphaBadge(),
                     ],
                   ),
                 ),

@@ -96,6 +96,8 @@ class _BootScreenState extends State<BootScreen> {
                           color: BrawlerColors.gold,
                         ),
                       ),
+                      SizedBox(height: 10),
+                      PreAlphaBadge(),
                     ],
                   ),
                 ),
