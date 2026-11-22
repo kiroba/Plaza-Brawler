@@ -159,7 +159,7 @@ class _TitleScreenState extends State<TitleScreen> {
                   child: Column(
                     children: [
                       Text(
-                        'PLAZA BRAWLER',
+                        'OMNIBRAWLER',
                         style: TextStyle(
                           fontSize: 34,
                           fontWeight: FontWeight.w900,

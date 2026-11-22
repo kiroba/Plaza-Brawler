@@ -1,4 +1,4 @@
-// Widget smoke tests (flutter test): the title screen shows PLAZA BRAWLER, fits a 360x640 portrait phone
+// Widget smoke tests (flutter test): the title screen shows OMNIBRAWLER, fits a 360x640 portrait phone
 // with no overflow, and its whole icon-grid menu fits an 800x360 landscape phone with no scrolling (the
 // old stacked buttons ran off the bottom). (The boot screen isn't pumped here: it starts the periodic
 // kiosk timer.)
@@ -16,7 +16,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(const MaterialApp(home: TitleScreen()));
     await tester.pump();
-    expect(find.text('PLAZA BRAWLER'), findsOneWidget);
+    expect(find.text('OMNIBRAWLER'), findsOneWidget);
     expect(find.text('ARCADE'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

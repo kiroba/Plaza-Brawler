@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
         android:networkSecurityConfig="@xml/network_security_config"
-        android:label="Plaza Brawler"
+        android:label="OmniBrawler"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
