@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:plaza_brawler/game/input.dart';
 import 'package:plaza_brawler/game/match_engine.dart';
+import 'package:plaza_brawler/game/moves.dart';
 import 'package:plaza_brawler/net/pvp_lockstep.dart';
 import 'package:plaza_brawler/net/pvp_session.dart';
 import 'package:plaza_brawler/npc/zodiac_offline.dart';
@@ -364,5 +365,138 @@ void main() {
       },
       timeout: const Timeout(Duration(seconds: 30)),
     );
+  });
+
+  group('S5: full-width intents over lockstep (fake transport)', () {
+    test('remote input wider than allBits is rejected, allBits accepted', () {
+      final ep = _FakeEndpoint();
+      final engine = _engine();
+      final driver = _driverFor(ep, isHost: true)..attach(engine);
+      driver.pump(() => FighterIntent.none);
+      expect(driver.steppedFrames, 3);
+
+      // A frame-3 input carrying a bit beyond the intent set is dropped:
+      // the engine cannot step frame 3.
+      ep.inject(
+        const PvpMessage(
+          PvpMessage.input,
+          _sessionId,
+          {'frame': 3, 'bits': FighterIntent.allBits + 1},
+        ),
+      );
+      driver.pump(() => FighterIntent.none);
+      expect(driver.steppedFrames, 3);
+
+      // The same frame at exactly allBits is accepted and steps.
+      ep.inject(
+        const PvpMessage(
+          PvpMessage.input,
+          _sessionId,
+          {'frame': 3, 'bits': FighterIntent.allBits},
+        ),
+      );
+      driver.pump(() => FighterIntent.none);
+      expect(driver.steppedFrames, 4);
+    });
+
+    test('LP low, throw vs block, and crouch cross the wire in sync',
+        () async {
+      final (epA, epB) = _pair();
+      final hostEngine = _engine();
+      final guestEngine = _engine();
+      final host = _driverFor(epA, isHost: true)..attach(hostEngine);
+      final guest = _driverFor(epB, isHost: false)..attach(guestEngine);
+
+      var hostIntent = FighterIntent.none;
+      var guestIntent = const FighterIntent(FighterIntent.block);
+
+      // Whoever pumps second in a round can step one frame further
+      // (its peer's input for that frame is already in hand), so the
+      // two drivers ride one frame apart mid-round. [settle] pumps the
+      // lagging side level — safe because the scripts hold intents
+      // constant between presses — and only then are the strict
+      // same-frame, same-hash assertions made.
+      Future<void> pumpBoth() async {
+        host.pump(() => hostIntent);
+        guest.pump(() => guestIntent);
+        await Future<void>.delayed(Duration.zero);
+        expect(host.aborted, isFalse);
+        expect(guest.aborted, isFalse);
+      }
+
+      Future<void> pumps(int n) async {
+        for (var i = 0; i < n; i++) {
+          await pumpBoth();
+        }
+      }
+
+      Future<void> settle() async {
+        var guard = 0;
+        while (host.steppedFrames != guest.steppedFrames && guard++ < 10) {
+          // Pump only the lagging side: it already holds the peer's
+          // input for the frame it is missing. Pumping both would
+          // preserve the one-frame offset forever.
+          if (host.steppedFrames < guest.steppedFrames) {
+            host.pump(() => hostIntent);
+          } else {
+            guest.pump(() => guestIntent);
+          }
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(host.steppedFrames, guest.steppedFrames);
+        expect(hostEngine.stateHash(), guestEngine.stateHash());
+      }
+
+      // Walk P1 in while P2 holds a standing block the whole match.
+      hostIntent = const FighterIntent(FighterIntent.right);
+      var guard = 0;
+      while (hostEngine.p2.x - hostEngine.p1.x > 44 && guard++ < 200) {
+        await pumpBoth();
+      }
+      expect(hostEngine.p2.x - hostEngine.p1.x, lessThanOrEqualTo(44));
+      hostIntent = FighterIntent.none;
+      await pumps(5);
+      await settle();
+
+      // LP is a low: it lands clean through the standing block.
+      // Damage is the move's base scaled by Aries' stat multiplier.
+      final p2Max = hostEngine.p2.maxHp;
+      final mult = offlineFighter('aries')!.stats.damageMultiplier;
+      final lpDmg = (Moves.lp.damage * mult).round();
+      final throwDmg = (Moves.throwMove.damage * mult).round();
+      hostIntent = const FighterIntent(FighterIntent.lp);
+      await pumpBoth();
+      hostIntent = FighterIntent.none;
+      await pumps(25);
+      await settle();
+      expect(lpDmg, greaterThan(0));
+      expect(hostEngine.p2.hp, p2Max - lpDmg);
+      expect(guestEngine.p2.hp, p2Max - lpDmg);
+
+      // Snug back up (the LP knocked P2 back a touch), then throw:
+      // unblockable, so the held block does not save P2 — 10 more.
+      hostIntent = const FighterIntent(FighterIntent.right);
+      await pumps(4);
+      hostIntent = const FighterIntent(FighterIntent.throwBtn);
+      await pumpBoth();
+      hostIntent = FighterIntent.none;
+      await pumps(30);
+      await settle();
+      expect(throwDmg, greaterThan(0));
+      expect(hostEngine.p2.hp, p2Max - lpDmg - throwDmg);
+      expect(guestEngine.p2.hp, p2Max - lpDmg - throwDmg);
+
+      // Crouch is a state of its own on both engines.
+      hostIntent = const FighterIntent(FighterIntent.crouch);
+      await pumps(6);
+      await settle();
+      expect(hostEngine.p1.crouching, isTrue);
+      expect(guestEngine.p1.crouching, isTrue);
+      hostIntent = FighterIntent.none;
+      await pumps(3);
+      await settle();
+      expect(host.desynced, isFalse);
+      expect(guest.desynced, isFalse);
+    });
   });
 }
