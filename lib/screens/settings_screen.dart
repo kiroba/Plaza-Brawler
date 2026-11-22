@@ -391,7 +391,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () => OmniOta.checkAndPrompt(context),
           ),
       const     Text(
-            'Plaza Brawler ${AppState.appVersion}',
+            'OmniBrawler ${AppState.appVersion}',
             style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ],

@@ -60,8 +60,8 @@ class FeedbackRepo {
       final bytes = utf8.encode(FeedbackRules.toCsv(rows));
       await SharePlus.instance.share(
         ShareParams(
-          title: 'Plaza Brawler feedback',
-          subject: 'Plaza Brawler playtest feedback (${rows.length} responses)',
+          title: 'OmniBrawler feedback',
+          subject: 'OmniBrawler playtest feedback (${rows.length} responses)',
           files: [XFile.fromData(bytes, mimeType: 'text/csv')],
           fileNameOverrides: const ['plaza_brawler_feedback.csv'],
         ),

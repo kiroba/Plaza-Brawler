@@ -891,7 +891,7 @@ class _AttractOverlayState extends State<_AttractOverlay>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'PLAZA BRAWLER',
+                  'OMNIBRAWLER',
                   style: TextStyle(
                     color: BrawlerColors.cyan,
                     fontSize: 26,

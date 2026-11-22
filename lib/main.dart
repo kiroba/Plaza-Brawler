@@ -44,7 +44,7 @@ class PlazaBrawlerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Plaza Brawler',
+      title: 'OmniBrawler',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       navigatorObservers: [appState.routeObserver],

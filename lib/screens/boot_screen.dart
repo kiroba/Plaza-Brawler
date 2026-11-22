@@ -79,7 +79,7 @@ class _BootScreenState extends State<BootScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'PLAZA BRAWLER',
+                        'OMNIBRAWLER',
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w900,
