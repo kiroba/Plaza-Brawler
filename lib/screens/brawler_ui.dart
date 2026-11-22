@@ -9,6 +9,34 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../audio/sfx.dart';
 
+/// The pre-alpha designation (Kiro, Nov 22, 2026): this build is
+/// pre-alpha testing software, and it says so on the boot and title
+/// panels and in the settings version line.
+class PreAlphaBadge extends StatelessWidget {
+  const PreAlphaBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: BrawlerColors.red.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: BrawlerColors.red, width: 1.5),
+      ),
+      child: const Text(
+        'PRE-ALPHA TESTING',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          color: BrawlerColors.red,
+          letterSpacing: 2,
+        ),
+      ),
+    );
+  }
+}
+
 class BrawlerColors {
   BrawlerColors._();
   static const bg = Color(0xFF0D0F18);
