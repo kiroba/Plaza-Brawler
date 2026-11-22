@@ -18,6 +18,7 @@ import '../audio/sfx.dart';
 import '../game/arcade.dart';
 import '../game/cpu_brain.dart';
 import '../game/fighter.dart';
+import '../game/stages.dart';
 import '../game/gamepad_input.dart';
 import '../game/hit_feel.dart';
 import '../game/input.dart';
@@ -108,6 +109,8 @@ class _FighterScreenState extends State<FighterScreen>
 
   /// Decoded pack sprites by asset path for fighters wearing a pack binding.
   final Map<String, ui.Image> _spriteImages = {};
+  ui.Image? _stageImage;
+  String? _stageAsset;
   int _shakeFrames = 0;
   final HitFeel _feel = HitFeel();
   final Random _fxRng = Random(7);
@@ -122,6 +125,7 @@ class _FighterScreenState extends State<FighterScreen>
     _padBridge.start();
     _engine = _newEngine(_cfg);
     _loadSprites(_cfg);
+    _loadStage(_cfg);
     final lockstep = _cfg.lockstep;
     if (lockstep != null) {
       lockstep.attach(_engine);
@@ -156,6 +160,21 @@ class _FighterScreenState extends State<FighterScreen>
         }
       });
     }
+  }
+
+  void _loadStage(FightConfig c) {
+    final asset = Stages.forMatch(
+      p1Element: c.p1.element,
+      p2Element: c.p2.element,
+      seed: c.seed,
+    );
+    if (asset == _stageAsset) return;
+    _stageAsset = asset;
+    loadFighterSpriteImage(asset).then((img) {
+      if (img != null && mounted && _stageAsset == asset) {
+        setState(() => _stageImage = img);
+      }
+    });
   }
 
   MatchEngine _newEngine(FightConfig c) {
@@ -322,6 +341,7 @@ class _FighterScreenState extends State<FighterScreen>
         );
         _engine = _newEngine(_cfg);
         _loadSprites(_cfg);
+    _loadStage(_cfg);
         _feel.reset();
         _ended = false;
       });
@@ -378,6 +398,7 @@ class _FighterScreenState extends State<FighterScreen>
                           flash: _flash,
                           shake: shake,
                           spriteImages: _spriteImages,
+                          stageImage: _stageImage,
                           sparkFrames: _sparkFrames,
                           sparkColors: _sparkColors,
                         ),

@@ -33,11 +33,17 @@ class ArenaPainter extends CustomPainter {
   /// before, so a sprite that fails to load never breaks a match.
   final Map<String, ui.Image> spriteImages;
 
+  /// Painted stage backdrop for this match (see Stages in
+  /// lib/game/stages.dart). Null paints the placeholder gradient, so
+  /// a stage that fails to load never breaks a match.
+  final ui.Image? stageImage;
+
   ArenaPainter({
     required this.engine,
     required this.flash,
     this.shake = Offset.zero,
     this.spriteImages = const {},
+    this.stageImage,
     this.sparkFrames = const [0, 0],
     this.sparkColors = const [Colors.white, Colors.white],
   }) : super();
@@ -138,6 +144,28 @@ class ArenaPainter extends CustomPainter {
       MatchEngine.arenaWidth,
       MatchEngine.arenaHeight,
     );
+    final stage = stageImage;
+    if (stage != null) {
+      // Cover-fit: centre-crop the source to the arena's aspect so
+      // wider or taller art never distorts.
+      final srcAspect = stage.width / stage.height;
+      const dstAspect = MatchEngine.arenaWidth / MatchEngine.arenaHeight;
+      var sw = stage.width.toDouble();
+      var sh = stage.height.toDouble();
+      if (srcAspect > dstAspect) {
+        sw = sh * dstAspect;
+      } else {
+        sh = sw / dstAspect;
+      }
+      final src = Rect.fromLTWH(
+        (stage.width - sw) / 2,
+        (stage.height - sh) / 2,
+        sw,
+        sh,
+      );
+      canvas.drawImageRect(stage, src, r, Paint());
+      return;
+    }
     canvas.drawRect(
       r,
       Paint()
