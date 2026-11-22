@@ -252,6 +252,184 @@ void main() {
       expect(s.statusLine(), 'On: results go to Omni Node on this phone');
     });
   });
+
+  group('PvP envelope ingest (Nov 22 hardening)', () {
+    const envelope = {
+      'type': 'pvp_match',
+      'payload': {
+        'v': 1,
+        'session_id': '0123456789abcdef0123456789abcdef',
+        'seed': 42,
+        'host_pubkey': 'aa',
+        'guest_pubkey': 'bb',
+        'p1_sign': 'aries',
+        'p2_sign': 'scorpio',
+        'winner': 'p1',
+        'wins': [2, 0],
+        'rounds': 2,
+        'duration_ms': 61000,
+        'final_state_hash': 'cc',
+      },
+      'signatures': {'host': 'dd', 'guest': 'ee'},
+    };
+
+    // Answers by body: envelope posts get [envStatus] (null = no answer),
+    // delegate summary posts get [sumStatus].
+    MatchShare pvpShare(
+      List<http.Request> reqs, {
+      required int? envStatus,
+      int sumStatus = 200,
+      List<ShareAttempt>? attempts,
+    }) {
+      return MatchShare(
+        saveLocal: (_) async => true,
+        shareEnabled: true,
+        token: () => 'tok',
+        appVersion: '5.4.0',
+        onAttempt: attempts?.add,
+        client: MockClient((r) async {
+          reqs.add(r);
+          final isEnvelope = (jsonDecode(r.body) as Map).containsKey('type');
+          final code = isEnvelope ? envStatus : sumStatus;
+          if (code == null) throw const SocketLikeError();
+          return http.Response('{}', code);
+        }),
+      );
+    }
+
+    test('envelope 200 -> shared, one post, attempt recorded', () async {
+      final reqs = <http.Request>[];
+      final attempts = <ShareAttempt>[];
+      final s = pvpShare(reqs, envStatus: 200, attempts: attempts);
+      expect(await s.sharePvpMatch(envelope), ShareResult.shared);
+      expect(reqs, hasLength(1));
+      expect(attempts.single.gate, 'shared');
+      expect(attempts.single.pvp, isTrue);
+    });
+
+    test('envelope 400 -> delegate summary fallback, sharedDelegate', () async {
+      final reqs = <http.Request>[];
+      final attempts = <ShareAttempt>[];
+      final s = pvpShare(reqs, envStatus: 400, attempts: attempts);
+      expect(await s.sharePvpMatch(envelope), ShareResult.sharedDelegate);
+      expect(reqs, hasLength(2));
+      expect(jsonDecode(reqs[1].body), {
+        'game': 'plaza_brawler',
+        'mode': 'pvp',
+        'p1_sign': 'aries',
+        'p2_sign': 'scorpio',
+        'winner': 'p1',
+        'rounds': 2,
+        'duration_ms': 61000,
+        'app_version': '5.4.0',
+      });
+      expect(attempts.single.gate, 'delegate');
+      expect(attempts.single.envelopeStatus, 400);
+      expect(attempts.single.httpStatus, 200);
+      expect(
+        MatchShare.words(ShareResult.sharedDelegate),
+        'Shared with Omni Node (summary only)',
+      );
+    });
+
+    test(
+      'envelope 400, summary also refused -> savedLocalOnly, both codes kept',
+      () async {
+        final reqs = <http.Request>[];
+        final attempts = <ShareAttempt>[];
+        final s = pvpShare(
+          reqs,
+          envStatus: 400,
+          sumStatus: 500,
+          attempts: attempts,
+        );
+        expect(await s.sharePvpMatch(envelope), ShareResult.savedLocalOnly);
+        expect(reqs, hasLength(2));
+        expect(attempts.single.gate, 'http');
+        expect(attempts.single.httpStatus, 500);
+        expect(attempts.single.envelopeStatus, 400);
+      },
+    );
+
+    test('envelope 401 -> NO fallback (same token gate)', () async {
+      final reqs = <http.Request>[];
+      final attempts = <ShareAttempt>[];
+      final s = pvpShare(reqs, envStatus: 401, attempts: attempts);
+      expect(await s.sharePvpMatch(envelope), ShareResult.savedLocalOnly);
+      expect(reqs, hasLength(1));
+      expect(attempts.single.gate, 'http');
+      expect(attempts.single.httpStatus, 401);
+      expect(attempts.single.describe(), contains('401'));
+      expect(attempts.single.describe(), contains('token'));
+    });
+
+    test('no answer -> NO fallback (envelope may have landed)', () async {
+      final reqs = <http.Request>[];
+      final attempts = <ShareAttempt>[];
+      final s = pvpShare(reqs, envStatus: null, attempts: attempts);
+      expect(await s.sharePvpMatch(envelope), ShareResult.savedLocalOnly);
+      expect(reqs, hasLength(1));
+      expect(attempts.single.gate, 'noAnswer');
+    });
+
+    test('envelope 404 -> nodeTooOld, no fallback, support latched', () async {
+      final reqs = <http.Request>[];
+      final s = pvpShare(reqs, envStatus: 404);
+      expect(await s.sharePvpMatch(envelope), ShareResult.nodeTooOld);
+      expect(reqs, hasLength(1));
+      expect(s.nodeSupportsMatches, isFalse);
+    });
+
+    test('sharing off -> nothing posted, attempt gate off', () async {
+      final reqs = <http.Request>[];
+      final attempts = <ShareAttempt>[];
+      final s = MatchShare(
+        saveLocal: (_) async => true,
+        onAttempt: attempts.add,
+        client: MockClient((r) async {
+          reqs.add(r);
+          return http.Response('{}', 200);
+        }),
+      );
+      expect(await s.sharePvpMatch(envelope), ShareResult.savedLocalOnly);
+      expect(reqs, isEmpty);
+      expect(attempts.single.gate, 'off');
+    });
+
+    test('attempt encode/decode round-trips; garbage decodes to null', () {
+      final a = ShareAttempt(
+        pvp: true,
+        gate: 'http',
+        httpStatus: 401,
+        at: DateTime.fromMillisecondsSinceEpoch(1700000000000),
+      );
+      final b = ShareAttempt.decode(a.encode())!;
+      expect(b.pvp, isTrue);
+      expect(b.gate, 'http');
+      expect(b.httpStatus, 401);
+      expect(b.envelopeStatus, isNull);
+      expect(b.at.millisecondsSinceEpoch, 1700000000000);
+      expect(ShareAttempt.decode(null), isNull);
+      expect(ShareAttempt.decode('nonsense'), isNull);
+      expect(ShareAttempt.decode('bogus|1|2|3|1'), isNull);
+    });
+
+    test('solo attempts are recorded too, and the status line names the code', () async {
+      final attempts = <ShareAttempt>[];
+      final s = MatchShare(
+        saveLocal: (_) async => true,
+        shareEnabled: true,
+        onAttempt: attempts.add,
+        client: MockClient((_) async => http.Response('{}', 500)),
+      );
+      s.nodeSupportsMatches = true;
+      expect(await s.shareMatch(_summary), ShareResult.savedLocalOnly);
+      expect(attempts.single.pvp, isFalse);
+      expect(attempts.single.gate, 'http');
+      expect(attempts.single.httpStatus, 500);
+      expect(s.statusLine(), contains('HTTP 500'));
+    });
+  });
 }
 
 class SocketLikeError implements Exception {

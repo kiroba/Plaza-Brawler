@@ -312,6 +312,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   }
                 : null,
           ),
+          if (appState.lastShareLine != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Last match: ${appState.lastShareLine}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text(

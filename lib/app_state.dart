@@ -121,6 +121,7 @@ class AppState extends ChangeNotifier {
   // default". v1 is deleted on load, so every phone starts with sharing off.
   static const _kShare = 'plaza_brawler_share_matches_v2';
   static const _kShareOld = 'plaza_brawler_share_matches_v1';
+  static const _kLastShare = 'plaza_brawler_last_share_v1';
   static const _kMuted = 'plaza_brawler_sfx_muted_v1';
   static const _kKioskOn = 'plaza_brawler_kiosk_on_v1';
   static const _kKioskPin = 'plaza_brawler_kiosk_pin_v1';
@@ -133,6 +134,9 @@ class AppState extends ChangeNotifier {
         omniNode.dispatchEvent('FIGHTER_MATCH_END', summary),
     token: () => omniNode.token,
     appVersion: appVersion,
+    // Persist every share attempt so Settings can say what the node actually
+    // answered, even after a restart (Nov 22: failed shares left no trace).
+    onAttempt: (a) => unawaited(_write(_kLastShare, a.encode())),
   );
   final KioskRouteObserver routeObserver = KioskRouteObserver();
 
@@ -159,6 +163,10 @@ class AppState extends ChangeNotifier {
 
   bool get kioskOn => kiosk.enabled;
   bool get shareEnabled => matchShare.shareEnabled;
+
+  /// What actually happened on the last share attempt, in plain words
+  /// (null before the first match). Shown in Settings under the share switch.
+  String? get lastShareLine => matchShare.lastAttempt?.describe();
 
   /// True once Omni Node on this phone lists "games_match" in node-health (daemon 8.28.0+). Until then the
   /// "Share my match results" switch is shown off and disabled ("turns on when Omni Node supports it").
@@ -200,6 +208,7 @@ class AppState extends ChangeNotifier {
     _howToSeen = await _read(_kHowTo) == '1';
     // Off unless the player turned it on (v2 key; the node's support is checked separately).
     matchShare.shareEnabled = await _read(_kShare) == '1';
+    matchShare.lastAttempt = ShareAttempt.decode(await _read(_kLastShare));
     await _write(_kShareOld, null);
     sfx.muted = await _read(_kMuted) == '1';
     // Not awaited: a slow or broken audio service must never hold up boot. Sfx never throws.
