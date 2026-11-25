@@ -21,6 +21,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:omni_core_ui/omni_core_ui.dart';
 
 import '../game/fighter.dart';
+import '../npc/secret_fighters.dart';
 import '../npc/zodiac_offline.dart';
 import 'brawler_seed_store.dart';
 import 'identity_transfer.dart';
@@ -225,6 +226,9 @@ class OmniNodeClient {
   /// An LPE fighter wears the default-Halo pack (see [loadPacks]); the plain
   /// offline fallback stays painted, exactly as before packs.
   FighterDef? playerFighter(String? chosenSign) {
+    // The secret fighter has no zodiac sign and no LPE profile: he resolves
+    // here, before the LPE/offline paths that would both return null.
+    if (chosenSign == creepyManSign) return creepyManFighter();
     final f = fighterFromLpe(lpeProfile, chosenSign: chosenSign);
     if (f != null) return _wearPack(f, lpeProfile);
     return chosenSign == null ? null : offlineFighter(chosenSign);

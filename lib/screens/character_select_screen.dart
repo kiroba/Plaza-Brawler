@@ -12,11 +12,13 @@
 // and, when the node's plaza has someone, a "Plaza challenger".
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
 import '../art/fighter_painter.dart';
 import '../audio/sfx.dart';
 import '../game/fighter.dart';
 import '../game/specials.dart';
 import '../npc/houses.dart';
+import '../npc/secret_fighters.dart';
 import '../npc/zodiac_offline.dart';
 import '../net/omni_node.dart';
 import 'brawler_ui.dart';
@@ -66,13 +68,22 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
   late final PageController _controller;
   late int _center;
 
+  /// Whether the boss win has unlocked the secret fighter (read once here;
+  /// the screen is rebuilt fresh on every visit, so a win since last time
+  /// is picked up).
+  late final bool _unlocked;
+
   @override
   void initState() {
     super.initState();
+    _unlocked = appState.bossBeaten;
     _roster = <FighterDef>[
       if (widget.opponentMode && widget.plaza != null) widget.plaza!,
-      ...offlineRoster(),
+      if (widget.opponentMode) ...offlineRoster(),
       if (widget.opponentMode) bossFighter(),
+      // Player mode: the 12 signs plus the creepy man last — locked (a
+      // '???' card) until the boss win, never hidden, so the goal is visible.
+      if (!widget.opponentMode) ...playerRoster(),
     ];
     var start = 0;
     if (!widget.opponentMode && widget.preselected != null) {
@@ -94,6 +105,10 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
 
   FighterDef get _current => _roster[_center % _roster.length];
 
+  /// True when [f] is the secret fighter and the boss win hasn't unlocked
+  /// him yet.
+  bool _locked(FighterDef f) => isSecretLocked(f, bossBeaten: _unlocked);
+
   void _spinTo(int virtualPage) {
     _controller.animateToPage(
       virtualPage,
@@ -103,6 +118,7 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
   }
 
   void _choose(FighterDef f) {
+    if (_locked(f)) return; // a locked card is display-only: no sound, no pop
     sfx.select();
     Navigator.of(context).pop(f.source == 'plaza' ? 'plaza' : f.sign);
   }
@@ -154,6 +170,7 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
                     child: _CarouselCard(
                       def: f,
                       centered: dist == 0,
+                      locked: _locked(f),
                       onTap: () =>
                           dist == 0 ? _choose(f) : _spinTo(virtual),
                     ),
@@ -163,7 +180,7 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          _DetailPanel(def: current, accent: color),
+          _DetailPanel(def: current, accent: color, locked: _locked(current)),
           const SizedBox(height: 14),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -171,11 +188,13 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            onPressed: () => _choose(current),
+            onPressed: _locked(current) ? null : () => _choose(current),
             child: Text(
-              widget.opponentMode
-                  ? 'FIGHT THE ${_label(current).toUpperCase()}'
-                  : 'CHOOSE ${_label(current).toUpperCase()}',
+              _locked(current)
+                  ? '??? — BEAT OPHIUCHUS TO UNLOCK'
+                  : widget.opponentMode
+                      ? 'FIGHT THE ${_label(current).toUpperCase()}'
+                      : 'CHOOSE ${_label(current).toUpperCase()}',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.2,
@@ -189,16 +208,23 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
 
   String _label(FighterDef f) => f.source == 'plaza'
       ? 'Plaza challenger'
-      : (f.isBoss ? 'Ophiuchus (boss)' : f.signTitle);
+      : (isSecretFighter(f)
+          ? (_locked(f) ? '???' : f.name)
+          : (f.isBoss ? 'Ophiuchus (boss)' : f.signTitle));
 }
 
 class _CarouselCard extends StatelessWidget {
   final FighterDef def;
   final bool centered;
+
+  /// The secret fighter before the boss win: a '???' card that shows
+  /// nothing of who he is (no portrait, no stats, no name).
+  final bool locked;
   final VoidCallback onTap;
   const _CarouselCard({
     required this.def,
     required this.centered,
+    required this.locked,
     required this.onTap,
   });
 
@@ -207,7 +233,16 @@ class _CarouselCard extends StatelessWidget {
     final color = Color(def.primary);
     final label = def.source == 'plaza'
         ? 'Plaza challenger'
-        : (def.isBoss ? 'Ophiuchus (boss)' : def.signTitle);
+        : (isSecretFighter(def)
+            ? (locked ? '???' : def.name)
+            : (def.isBoss ? 'Ophiuchus (boss)' : def.signTitle));
+    final sub = locked
+        ? 'SECRET FIGHTER'
+        : def.source == 'plaza'
+            ? (def.handle ?? def.name)
+            : isSecretFighter(def)
+                ? '${def.element.toUpperCase()} · ${_cap(def.archetype)}'
+                : '${_glyphs[def.sign] ?? ''} ${def.element.toUpperCase()} · ${_cap(def.archetype)}${houseOf(def.sign) == null ? '' : ' · ${houseOf(def.sign)!.title}'}';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       child: Material(
@@ -233,7 +268,22 @@ class _CarouselCard extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                FighterPortrait(def: def, size: 132),
+                locked
+                    ? const SizedBox(
+                        width: 132,
+                        height: 132,
+                        child: Center(
+                          child: Text(
+                            '?',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 72,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      )
+                    : FighterPortrait(def: def, size: 132),
                 const SizedBox(height: 6),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -250,9 +300,7 @@ class _CarouselCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  def.source == 'plaza'
-                      ? (def.handle ?? def.name)
-                      : '${_glyphs[def.sign] ?? ''} ${def.element.toUpperCase()} · ${_cap(def.archetype)}${houseOf(def.sign) == null ? '' : ' · ${houseOf(def.sign)!.title}'}',
+                  sub,
                   style: TextStyle(
                     color: color,
                     fontSize: 11,
@@ -272,10 +320,49 @@ class _CarouselCard extends StatelessWidget {
 class _DetailPanel extends StatelessWidget {
   final FighterDef def;
   final Color accent;
-  const _DetailPanel({required this.def, required this.accent});
+
+  /// The secret fighter before the boss win: no dossier at all, only the
+  /// unlock criterion.
+  final bool locked;
+  const _DetailPanel({
+    required this.def,
+    required this.accent,
+    required this.locked,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (locked) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: BrawlerColors.panel,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: accent.withValues(alpha: 0.5)),
+        ),
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'A SECRET FIGHTER',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'Beat Ophiuchus, the 13th Sign, to unlock this fighter. '
+              'Win an arcade run to reveal who waits behind the boss.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
     final s = def.stats;
     final personality = def.source == 'plaza'
         ? 'A challenger from your plaza. No dossier — yet.'
