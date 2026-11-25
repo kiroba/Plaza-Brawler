@@ -9,9 +9,7 @@ class HowToPlayScreen extends StatelessWidget {
   const HowToPlayScreen({super.key});
 
   static const _rows = [
-    ['◀  ▶', 'Move left and right', 'A / D'],
-    ['▲', 'Jump (attack in the air to hit a blocker)', 'W'],
-    ['▼', 'Crouch (hold). Low block = crouch + block', 'S'],
+    ['STICK', 'Move: drag the thumb left / right; up to jump, down to crouch (hold)', 'A / D / W / S'],
     ['HP', 'High punch (chains up to 2)', 'U'],
     ['LP', 'Low punch — fastest, chains up to 3. Block it LOW', 'J'],
     ['HK', 'High kick — slow, big knockback, anti-air', 'I'],
@@ -20,7 +18,7 @@ class HowToPlayScreen extends StatelessWidget {
     ['T', 'Throw — unblockable at point blank; press throw as it lands to tech out', 'H'],
     ['S', 'Special (needs a full meter)', 'Space'],
     ['LP LP HK', 'Combos: hits that land while they reel count up. LP·LP·HP is the One-Two (+3 dmg); LP·LP·HK is the Plaza Finisher — faster, harder', 'J J I'],
-    ['S + ▶/◀/▼', 'Special + direction: a different elemental ability — forward, back, or down. Sixteen across the four elements', 'Space + dir'],
+    ['S + dir', 'Special + direction: a different elemental ability — forward, back, or down. Sixteen across the four elements', 'Space + dir'],
   ];
 
   @override
