@@ -20,6 +20,8 @@ Future<Object?> _storageHandler(
   switch (call.method) {
     case 'read':
       return store[key];
+    case 'containsKey':
+      return store.containsKey(key);
     case 'write':
       if (key != null) store[key] = (args['value'] as String?) ?? '';
       return null;
@@ -44,7 +46,9 @@ void main() {
       store = {};
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-            const MethodChannel('flutter_secure_storage'),
+            const MethodChannel(
+              'plugins.it_nomads.com/flutter_secure_storage',
+            ),
             (call) => _storageHandler(store, call),
           );
     });
@@ -52,7 +56,9 @@ void main() {
     tearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-            const MethodChannel('flutter_secure_storage'),
+            const MethodChannel(
+              'plugins.it_nomads.com/flutter_secure_storage',
+            ),
             null,
           );
     });
