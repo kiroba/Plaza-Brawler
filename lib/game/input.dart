@@ -90,6 +90,46 @@ class TouchInput implements InputSource {
   }
 }
 
+/// Digital analog stick for the on-screen D-pad (Nov 25, 2026 — Kiro: "needs
+/// directional pad instead of seperate buttons. like a digital analog stick
+/// for movement"). Pure Dart, like the rest of this file: it maps a normalized
+/// stick offset to the SAME discrete FighterIntent bits the four arrow buttons
+/// used to send, so the MatchEngine is untouched. The fight screen's stick
+/// widget feeds it offsets and presses/releases the returned flags through
+/// TouchInput, which keeps its tap-latch discipline.
+///
+/// [dx] is right-positive, [dy] is DOWN-positive (screen space, as the widget
+/// reports it); both are normalized to the stick's travel (-1..1, clamped).
+/// Past [deadZone] an axis reads as its direction, so a diagonal reads as two
+/// bits at once (advance + jump, retreat + crouch, ...); inside the dead zone
+/// the stick reads as nothing. Up is jump, down is crouch — the same split as
+/// the keyboard (W/S) and the gamepad stick (S1).
+class TouchStick {
+  /// How far the thumb must travel from centre before a direction counts.
+  /// Lower than the gamepad stick's 0.5: a thumb travels a short radius, and
+  /// 0.35 still leaves a real dead zone around centre.
+  static const double deadZone = 0.35;
+
+  /// The four direction flags the stick can produce.
+  static const List<int> directionFlags = [
+    FighterIntent.left,
+    FighterIntent.right,
+    FighterIntent.up,
+    FighterIntent.crouch,
+  ];
+
+  static int bitsFor(double dx, double dy) {
+    final x = dx.clamp(-1.0, 1.0);
+    final y = dy.clamp(-1.0, 1.0);
+    var bits = 0;
+    if (x <= -deadZone) bits |= FighterIntent.left;
+    if (x >= deadZone) bits |= FighterIntent.right;
+    if (y <= -deadZone) bits |= FighterIntent.up;
+    if (y >= deadZone) bits |= FighterIntent.crouch;
+    return bits;
+  }
+}
+
 /// Desktop keyboard: A/D or arrows to move, W/up to jump, S/down to crouch,
 /// U HP, J LP, I HK, K LK, L block, H throw, Space special.
 /// Keys are plain lowercase labels so this stays Flutter-free; the fight screen maps key events.

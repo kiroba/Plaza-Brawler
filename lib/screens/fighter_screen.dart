@@ -1,6 +1,6 @@
 // Fight screen (spec 4.3, 4.10): a thin view over the pure-Dart MatchEngine, stepped at a fixed 60 Hz from a
-// Ticker. Real: HUD (HP, meter, centred timer, round pips, arcade score), touch pad (d-pad + L/H/B/S, each
-// >= 56 dp) through TouchInput, desktop keys through KeyboardInput, CPU through CpuBrain, signed
+// Ticker. Real: HUD (HP, meter, centred timer, round pips, arcade score), touch pad (directional stick
+// + attack buttons, each >= 56 dp) through TouchInput, desktop keys through KeyboardInput, CPU through CpuBrain, signed
 // FIGHTER_MATCH_START / FIGHTER_ROUND_END events and the match summary saved via MatchShare, kiosk pause,
 // and the CPU-vs-CPU attract loop. Placeholder art (lib/art/fighter_painter.dart). Hit-stop and KO slow-mo
 // (lib/game/hit_feel.dart) only decide WHEN the engine ticks, so the engine stays deterministic; the K.O.
@@ -669,8 +669,9 @@ class _SideBars extends StatelessWidget {
   }
 }
 
-/// D-pad bottom left (left, jump, crouch, right), actions bottom right: the four attacks
-/// in a 2x2 (HP HK / LP LK) with block, throw and special along the edge. Each pad is >= 56 dp.
+/// Directional stick bottom left, actions bottom right: the four attacks
+/// in a 2x2 (HP HK / LP LK) with block, throw and special along the edge. Each attack pad is >= 56 dp;
+/// the stick is a 168 dp circle (144 dp on short screens) with a 64 dp thumb.
 class _TouchPad extends StatelessWidget {
   final TouchInput input;
   final bool compact;
@@ -682,25 +683,7 @@ class _TouchPad extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        _Pad(label: '◀', flag: FighterIntent.left, input: input, size: s),
-        const SizedBox(width: 6),
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _Pad(label: '▲', flag: FighterIntent.up, input: input, size: s),
-            if (!compact) const SizedBox(height: s / 2),
-          ],
-        ),
-        const SizedBox(width: 6),
-        _Pad(label: '▶', flag: FighterIntent.right, input: input, size: s),
-        const SizedBox(width: 6),
-        _Pad(
-          label: '▼',
-          flag: FighterIntent.crouch,
-          input: input,
-          size: s,
-          color: Colors.blueGrey,
-        ),
+        _DpadStick(input: input, size: compact ? 144 : 168),
         const Spacer(),
         Column(
           mainAxisSize: MainAxisSize.min,
@@ -778,6 +761,166 @@ class _TouchPad extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Directional pad: a digital analog stick for movement (Nov 25, 2026 — Kiro's
+/// v0.3.3 feedback: "needs directional pad instead of seperate buttons. like a
+/// digital analog stick for movement"). Drag the thumb from centre; the drag maps
+/// through TouchStick to the same discrete FighterIntent bits the four arrow
+/// buttons used to send (left / right / up = jump / down = crouch, diagonals
+/// included), pressed/released through TouchInput as the drag crosses the dead
+/// zone. Releasing the thumb springs it back to centre and releases every
+/// direction. The attack buttons are untouched.
+class _DpadStick extends StatefulWidget {
+  final TouchInput input;
+
+  /// Outer diameter of the stick zone.
+  final double size;
+
+  /// Diameter of the thumb knob.
+  static const double knobSize = 64;
+
+  const _DpadStick({required this.input, this.size = 168});
+
+  @override
+  State<_DpadStick> createState() => _DpadStickState();
+}
+
+class _DpadStickState extends State<_DpadStick> {
+  /// Thumb offset from centre, in px, clamped to [_travel].
+  Offset _thumb = Offset.zero;
+
+  /// Direction flags currently pressed through [TouchInput].
+  int _bits = 0;
+
+  double get _travel => widget.size / 2 - _DpadStick.knobSize / 2;
+
+  void _applyBits(int bits) {
+    for (final flag in TouchStick.directionFlags) {
+      final was = _bits & flag != 0;
+      final isNow = bits & flag != 0;
+      if (isNow && !was) widget.input.press(flag);
+      if (!isNow && was) widget.input.release(flag);
+    }
+    _bits = bits;
+  }
+
+  void _onDrag(Offset local) {
+    final centre = Offset(widget.size / 2, widget.size / 2);
+    var offset = local - centre;
+    if (offset.distance > _travel) {
+      offset = offset / offset.distance * _travel;
+    }
+    final bits = TouchStick.bitsFor(offset.dx / _travel, offset.dy / _travel);
+    setState(() => _thumb = offset);
+    _applyBits(bits);
+  }
+
+  void _onEnd() {
+    setState(() => _thumb = Offset.zero);
+    _applyBits(0);
+  }
+
+  Offset _local(Offset global) {
+    final box = context.findRenderObject() as RenderBox;
+    return box.globalToLocal(global);
+  }
+
+  @override
+  void dispose() {
+    _applyBits(0);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final knobCentre = Offset(
+      widget.size / 2 + _thumb.dx,
+      widget.size / 2 + _thumb.dy,
+    );
+    return GestureDetector(
+      onPanStart: (details) => _onDrag(_local(details.globalPosition)),
+      onPanUpdate: (details) => _onDrag(_local(details.globalPosition)),
+      onPanEnd: (_) => _onEnd(),
+      onPanCancel: _onEnd,
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.10),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  width: 2,
+                ),
+              ),
+            ),
+            const Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  '▲',
+                  style: TextStyle(color: Colors.white54, fontSize: 18),
+                ),
+              ),
+            ),
+            const Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text(
+                  '▼',
+                  style: TextStyle(color: Colors.white54, fontSize: 18),
+                ),
+              ),
+            ),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: Text(
+                  '◀',
+                  style: TextStyle(color: Colors.white54, fontSize: 18),
+                ),
+              ),
+            ),
+            const Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Text(
+                  '▶',
+                  style: TextStyle(color: Colors.white54, fontSize: 18),
+                ),
+              ),
+            ),
+            Positioned(
+              left: knobCentre.dx - _DpadStick.knobSize / 2,
+              top: knobCentre.dy - _DpadStick.knobSize / 2,
+              child: Container(
+                width: _DpadStick.knobSize,
+                height: _DpadStick.knobSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(
+                    alpha: _bits == 0 ? 0.22 : 0.55,
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    width: 2,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
