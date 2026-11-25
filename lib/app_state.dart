@@ -125,6 +125,7 @@ class AppState extends ChangeNotifier {
   static const _kMuted = 'plaza_brawler_sfx_muted_v1';
   static const _kKioskOn = 'plaza_brawler_kiosk_on_v1';
   static const _kKioskPin = 'plaza_brawler_kiosk_pin_v1';
+  static const _kBossBeaten = 'plaza_brawler_boss_beaten_v1';
 
   final KioskController kiosk = KioskController();
   final HighScoreRepo highScores = HighScoreRepo();
@@ -142,6 +143,10 @@ class AppState extends ChangeNotifier {
 
   /// The sign picked on this phone (null until the first pick). Not used in kiosk mode: every player picks.
   String? chosenSign;
+
+  /// True once the arcade boss (Ophiuchus) has been beaten on this phone.
+  /// Unlocks the secret roster. Loaded in [load].
+  bool bossBeaten = false;
   bool _howToSeen = false;
   bool _howToSeenThisSession = false;
 
@@ -205,6 +210,7 @@ class AppState extends ChangeNotifier {
   /// Reads everything saved on this phone. Never throws.
   Future<void> load() async {
     chosenSign = await _read(_kSign);
+    bossBeaten = await _read(_kBossBeaten) == '1';
     _howToSeen = await _read(_kHowTo) == '1';
     // Off unless the player turned it on (v2 key; the node's support is checked separately).
     matchShare.shareEnabled = await _read(_kShare) == '1';
@@ -227,6 +233,16 @@ class AppState extends ChangeNotifier {
     if (kioskOn) return; // a stranger's pick isn't saved for the next one
     chosenSign = sign;
     await _write(_kSign, sign);
+    notifyListeners();
+  }
+
+  /// Records an arcade boss win: the secret roster unlocks. Persists even
+  /// in kiosk mode — the unlock is a device achievement, not one player's
+  /// pick — and [resetDemoData] clears it again. Idempotent.
+  Future<void> markBossBeaten() async {
+    if (bossBeaten) return;
+    bossBeaten = true;
+    await _write(_kBossBeaten, '1');
     notifyListeners();
   }
 
@@ -335,6 +351,8 @@ class AppState extends ChangeNotifier {
   Future<void> resetDemoData() async {
     await highScores.clear();
     await feedback.clear();
+    bossBeaten = false;
+    await _write(_kBossBeaten, null);
     notifyListeners();
   }
 

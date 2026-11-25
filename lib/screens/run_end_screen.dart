@@ -7,7 +7,16 @@ import 'brawler_ui.dart';
 
 class RunEndScreen extends StatelessWidget {
   final ArcadeRun run;
-  const RunEndScreen({super.key, required this.run});
+
+  /// True only on the run that first unlocked the secret roster (the
+  /// arcade flow sets it); a repeat boss win shows no banner.
+  final bool secretUnlocked;
+
+  const RunEndScreen({
+    super.key,
+    required this.run,
+    this.secretUnlocked = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +36,23 @@ class RunEndScreen extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
+          if (won && secretUnlocked) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'SECRET FIGHTER UNLOCKED',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: BrawlerColors.gold,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const Text(
+              'The Creepy Man joins character select.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ],
           const SizedBox(height: 16),
           _stat('Score', '${run.score}'),
           _stat('Reached', 'Fight ${run.reached} of ${run.length}'),

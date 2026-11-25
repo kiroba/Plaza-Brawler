@@ -184,9 +184,14 @@ class ArcadeFlow {
   }
 
   static Future<void> _runEnd(ArcadeRun run, int session) async {
+    // The boss win unlocks the secret roster. Persist before the run-end
+    // screen so it can announce a fresh unlock.
+    final newlyUnlocked =
+        run.status == RunStatus.won && !appState.bossBeaten;
+    if (run.status == RunStatus.won) await appState.markBossBeaten();
     final seen = await pushNamedPage<bool>(
       Routes.runEnd,
-      RunEndScreen(run: run),
+      RunEndScreen(run: run, secretUnlocked: newlyUnlocked),
     );
     if (seen == null || session != _session) return;
 
