@@ -13,7 +13,9 @@ import 'package:plaza_brawler/game/stage_animation.dart';
 Future<ui.Image> _pixel() async {
   const png =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-  return ui.decodeImageFromList(base64Decode(png));
+  final codec = await ui.instantiateImageCodec(base64Decode(png));
+  final frame = await codec.getNextFrame();
+  return frame.image;
 }
 
 void main() {

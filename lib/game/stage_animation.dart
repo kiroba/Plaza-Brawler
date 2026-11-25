@@ -3,6 +3,8 @@
 /// Frames advance on engine steps, never on wall clock, so both PvP sides
 /// step the same frames from the same lockstepped engine — and a paused or
 /// hit-stopped fight freezes the stage with everything else.
+library;
+
 import 'dart:ui' as ui;
 
 /// Pure frame selection for a looping stage asset.
