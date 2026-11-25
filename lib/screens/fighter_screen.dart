@@ -110,6 +110,14 @@ class _FighterScreenState extends State<FighterScreen>
   /// Decoded pack sprites by asset path for fighters wearing a pack binding.
   final Map<String, ui.Image> _spriteImages = {};
   ui.Image? _stageImage;
+
+  /// Decoded frames of the looping animated stage for this match. Empty
+  /// until the animated asset loads — the still [_stageImage] paints first.
+  final List<ui.Image> _stageFrames = [];
+
+  /// Engine steps elapsed this match; drives the stage loop (see
+  /// StageFrameSelector). Advanced in [_afterStep], once per engine step.
+  int _stageStep = 0;
   String? _stageAsset;
   int _shakeFrames = 0;
   final HitFeel _feel = HitFeel();
@@ -170,6 +178,22 @@ class _FighterScreenState extends State<FighterScreen>
     );
     if (asset == _stageAsset) return;
     _stageAsset = asset;
+    _stageImage = null;
+    _stageFrames.clear();
+    _stageStep = 0;
+    // Animated first: a decoded loop replaces the still. Either load
+    // failing leaves the still (then the gradient) — a stage that fails
+    // to load never breaks a match.
+    final animated = Stages.animatedFor(asset);
+    loadAnimatedStageImage(animated).then((frames) {
+      if (frames.isNotEmpty && mounted && _stageAsset == asset) {
+        setState(() {
+          _stageFrames
+            ..clear()
+            ..addAll(frames);
+        });
+      }
+    });
     loadFighterSpriteImage(asset).then((img) {
       if (img != null && mounted && _stageAsset == asset) {
         setState(() => _stageImage = img);
@@ -260,6 +284,10 @@ class _FighterScreenState extends State<FighterScreen>
   }
 
   void _afterStep() {
+    // One engine step: advance the stage loop with the fight, never with
+    // wall clock. Lockstep only calls this when a step actually ran, so
+    // both PvP sides advance the same frames.
+    _stageStep++;
     for (var s = 0; s < 2; s++) {
       if (_flash[s] > 0) _flash[s]--;
       if (_sparkFrames[s] > 0) _sparkFrames[s]--;
@@ -399,6 +427,8 @@ class _FighterScreenState extends State<FighterScreen>
                           shake: shake,
                           spriteImages: _spriteImages,
                           stageImage: _stageImage,
+                          stageFrames: _stageFrames,
+                          stageStep: _stageStep,
                           sparkFrames: _sparkFrames,
                           sparkColors: _sparkColors,
                         ),
