@@ -51,4 +51,28 @@ void main() {
       expect(seen, Stages.plazas.toSet());
     });
   });
+
+  group('Stages.animatedFor', () {
+    test('every still maps to its animated webp twin', () {
+      expect(Stages.animatedFor(Stages.plazaDawn), Stages.plazaDawnAnimated);
+      expect(Stages.animatedFor(Stages.plazaDusk), Stages.plazaDuskAnimated);
+      expect(Stages.animatedFor(Stages.plazaNight), Stages.plazaNightAnimated);
+      expect(Stages.animatedFor(Stages.fireArena), Stages.fireArenaAnimated);
+      expect(Stages.animatedFor(Stages.waterArena), Stages.waterArenaAnimated);
+    });
+
+    test('unknown paths pass through unchanged', () {
+      expect(
+        Stages.animatedFor('assets/stages/other.jpg'),
+        'assets/stages/other.jpg',
+      );
+    });
+
+    test('the animated set covers every still', () {
+      expect(Stages.animatedAll.length, Stages.all.length);
+      for (final still in Stages.all) {
+        expect(Stages.animatedAll, contains(Stages.animatedFor(still)));
+      }
+    });
+  });
 }

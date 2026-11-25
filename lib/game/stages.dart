@@ -10,6 +10,42 @@ class Stages {
   static const fireArena = 'assets/stages/fire_arena.jpg';
   static const waterArena = 'assets/stages/water_arena.jpg';
 
+  /// Looping animated twin of each still (assets/stages/<name>.webp,
+  /// 12 frames). The painter plays the loop from the fight ticker; the
+  /// JPG stays as the fallback when the animated asset fails to load.
+  static const plazaDawnAnimated = 'assets/stages/plaza_dawn.webp';
+  static const plazaDuskAnimated = 'assets/stages/plaza_dusk.webp';
+  static const plazaNightAnimated = 'assets/stages/plaza_night.webp';
+  static const fireArenaAnimated = 'assets/stages/fire_arena.webp';
+  static const waterArenaAnimated = 'assets/stages/water_arena.webp';
+
+  static const animatedAll = [
+    plazaDawnAnimated,
+    plazaDuskAnimated,
+    plazaNightAnimated,
+    fireArenaAnimated,
+    waterArenaAnimated,
+  ];
+
+  /// The animated twin of a still stage path. Unknown paths pass through
+  /// unchanged, so a still with no animated twin still loads as before.
+  static String animatedFor(String still) {
+    switch (still) {
+      case plazaDawn:
+        return plazaDawnAnimated;
+      case plazaDusk:
+        return plazaDuskAnimated;
+      case plazaNight:
+        return plazaNightAnimated;
+      case fireArena:
+        return fireArenaAnimated;
+      case waterArena:
+        return waterArenaAnimated;
+      default:
+        return still;
+    }
+  }
+
   /// The plaza set, in rotation order.
   static const plazas = [plazaDawn, plazaDusk, plazaNight];
 

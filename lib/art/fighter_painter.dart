@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import '../game/fighter.dart';
 import '../game/match_engine.dart';
 import '../game/specials.dart';
+import '../game/stage_animation.dart';
 
 /// Draws the arena, both fighters, projectiles and hit flashes for one [MatchEngine] frame.
 class ArenaPainter extends CustomPainter {
@@ -38,12 +39,24 @@ class ArenaPainter extends CustomPainter {
   /// a stage that fails to load never breaks a match.
   final ui.Image? stageImage;
 
+  /// Decoded frames of the looping animated stage (see Stages.animatedFor).
+  /// Empty plays the still [stageImage] instead, so a stage whose animated
+  /// asset fails to load never breaks a match.
+  final List<ui.Image> stageFrames;
+
+  /// Engine steps elapsed this match. The painter picks the frame from
+  /// this count (StageFrameSelector), so the loop is driven by the fight
+  /// ticker, never by wall clock.
+  final int stageStep;
+
   ArenaPainter({
     required this.engine,
     required this.flash,
     this.shake = Offset.zero,
     this.spriteImages = const {},
     this.stageImage,
+    this.stageFrames = const [],
+    this.stageStep = 0,
     this.sparkFrames = const [0, 0],
     this.sparkColors = const [Colors.white, Colors.white],
   }) : super();
@@ -144,7 +157,9 @@ class ArenaPainter extends CustomPainter {
       MatchEngine.arenaWidth,
       MatchEngine.arenaHeight,
     );
-    final stage = stageImage;
+    final stage =
+        StageFrameSelector.frameFor(step: stageStep, frames: stageFrames) ??
+        stageImage;
     if (stage != null) {
       // Cover-fit: centre-crop the source to the arena's aspect so
       // wider or taller art never distorts.
@@ -465,6 +480,23 @@ Future<ui.Image?> loadFighterSpriteImage(String asset) async {
     return frame.image;
   } catch (_) {
     return null;
+  }
+}
+
+/// Decodes every frame of a looping animated stage asset. Empty on any
+/// failure — callers fall back to the still stage image. Frames are capped
+/// so an asset with a wild frame count cannot blow up memory.
+Future<List<ui.Image>> loadAnimatedStageImage(String asset) async {
+  try {
+    final data = await rootBundle.load(asset);
+    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    final frames = <ui.Image>[];
+    for (var i = 0; i < codec.frameCount && frames.length < 24; i++) {
+      frames.add((await codec.getNextFrame()).image);
+    }
+    return frames;
+  } catch (_) {
+    return [];
   }
 }
 
