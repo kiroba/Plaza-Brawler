@@ -372,25 +372,37 @@ class _CarouselCard extends StatelessWidget {
                 width: centered ? 3 : 1.5,
               ),
             ),
+            // The portrait flexes: on the 196 dp stacked carousel the
+            // card's inner box is only 182 dp, and the longest labels/subs
+            // need ~210 dp with a fixed 132 portrait (Nov 26 round 2: two
+            // RenderFlex overflows, 28 px and 9 px). The portrait takes
+            // whatever height is left after the labels, shrinking only as
+            // far as the card needs — the labels never shrink, and the
+            // card can never overflow its box.
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                locked
-                    ? const SizedBox(
-                        width: 132,
-                        height: 132,
-                        child: Center(
-                          child: Text(
-                            '?',
-                            style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 72,
-                              fontWeight: FontWeight.w900,
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: locked
+                        ? const SizedBox(
+                            width: 132,
+                            height: 132,
+                            child: Center(
+                              child: Text(
+                                '?',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 72,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      )
-                    : FighterPortrait(def: def, size: 132),
+                          )
+                        : FighterPortrait(def: def, size: 132),
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
