@@ -148,6 +148,9 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
   }
 
   /// The roomy layout: header, carousel, dossier, button, stacked.
+  /// Sized to fit an 800 dp tall screen at rest (Nov 26: the 236 dp
+  /// carousel + roomy gaps ran 34 dp past the fold): carousel 196, gaps
+  /// tightened. The page stays scrollable for anything still taller.
   Widget _buildStacked(FighterDef current, Color color, String? handle) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -168,11 +171,11 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.white38, fontSize: 11),
         ),
+        const SizedBox(height: 6),
+        _carousel(196),
         const SizedBox(height: 8),
-        _carousel(236),
-        const SizedBox(height: 10),
         _DetailPanel(def: current, accent: color, locked: _locked(current)),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         _chooseButton(color, current),
       ],
     );
@@ -445,9 +448,9 @@ class _DetailPanel extends StatelessWidget {
       return Container(
         padding: EdgeInsets.fromLTRB(
           14,
-          compact ? 8 : 12,
+          compact ? 8 : 10,
           14,
-          compact ? 8 : 12,
+          compact ? 8 : 10,
         ),
         decoration: BoxDecoration(
           color: BrawlerColors.panel,
@@ -490,7 +493,7 @@ class _DetailPanel extends StatelessWidget {
         def.temperament.isNotEmpty &&
         def.temperament.last == house.shade;
     return Container(
-      padding: EdgeInsets.fromLTRB(14, compact ? 8 : 12, 14, compact ? 8 : 12),
+      padding: EdgeInsets.fromLTRB(14, compact ? 8 : 10, 14, compact ? 8 : 10),
       decoration: BoxDecoration(
         color: BrawlerColors.panel,
         borderRadius: BorderRadius.circular(14),
@@ -602,7 +605,7 @@ class _StatBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: compact ? 1.5 : 2.5),
+      padding: EdgeInsets.symmetric(vertical: compact ? 1.5 : 2.0),
       child: Row(
         children: [
           SizedBox(
