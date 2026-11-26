@@ -32,6 +32,7 @@ void main() {
     for (final label in [
       'ARCADE',
       'QUICK FIGHT',
+      'SURVIVE',
       'PLAY TOGETHER',
       'HIGH SCORES',
       'HOW TO PLAY',

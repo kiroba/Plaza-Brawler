@@ -12,6 +12,7 @@ import '../app_state.dart';
 import '../game/arcade.dart';
 import '../game/fighter.dart';
 import '../game/records.dart';
+import '../game/survive.dart';
 import '../net/omni_node.dart';
 import 'brawler_ui.dart';
 import 'character_select_screen.dart';
@@ -22,6 +23,7 @@ import 'high_scores_screen.dart';
 import 'how_to_play_screen.dart';
 import 'initials_screen.dart';
 import 'run_end_screen.dart';
+import 'survive_end_screen.dart';
 import 'versus_splash.dart';
 
 class ArcadeFlow {
@@ -34,6 +36,7 @@ class ArcadeFlow {
 
   static Future<void> startArcade() => _guard(_arcade);
   static Future<void> startQuickFight() => _guard(_quick);
+  static Future<void> startSurvive() => _guard(_survive);
 
   static Future<void> _guard(Future<void> Function() f) async {
     if (_busy) return;
@@ -302,6 +305,65 @@ class ArcadeFlow {
       }
       if (next != 'retry') break;
       seed = _rng.nextInt(1 << 31);
+    }
+    _toTitle();
+  }
+
+  static Future<void> _survive() async {
+    final session = _session;
+    final player = await _pickPlayer(session);
+    if (player == null) return;
+    if (!await _howToPlayIfNeeded(session)) return;
+
+    final seed = appState.kioskOn
+        ? appState.kiosk.session.runSeed
+        : _rng.nextInt(1 << 31);
+    var again = true;
+    while (again) {
+      final run = SurviveRun(seed: seed, player: player);
+      while (!run.finished) {
+        final opp = await omniNode.opponent(run.currentSign, run.fightSeed);
+        if (session != _session) return;
+        final go = await pushNamedPage<bool>(
+          Routes.versus,
+          VersusSplash(
+            p1: player,
+            p2: opp,
+            subtitle: run.atBoss
+                ? 'BOSS FIGHT'
+                : 'STAGE ${run.stageNumber}',
+          ),
+        );
+        if (go != true || session != _session) return;
+        final out = await pushNamedPage<FightOutcome>(
+          Routes.fight,
+          FighterScreen(
+            config: FightConfig(
+              p1: player,
+              p2: opp,
+              seed: run.fightSeed,
+              mode: 'survive',
+              difficulty: run.difficulty,
+              survive: run,
+            ),
+          ),
+        );
+        if (out == null || session != _session) return;
+        run.onFightEnd(playerWon: out.playerWon);
+      }
+      final isNewBest = await appState.recordSurviveBest(
+        run.opponentsBeaten,
+      );
+      final next = await pushNamedPage<String>(
+        Routes.surviveEnd,
+        SurviveEndScreen(
+          run: run,
+          best: appState.surviveBest,
+          isNewBest: isNewBest,
+        ),
+      );
+      if (next == null || session != _session) return;
+      again = next == 'again';
     }
     _toTitle();
   }

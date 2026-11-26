@@ -39,6 +39,7 @@ class Routes {
   static const dialog = 'dialog';
   static const settings = 'settings';
   static const pvp = 'pvp';
+  static const surviveEnd = 'survive_end';
 
   /// Plain dark page under every Arcade / Quick Fight step (screens/brawler_ui.dart FlowBackdrop).
   static const flow = 'flow';
@@ -53,6 +54,7 @@ class Routes {
         return KioskScreen.fight;
       case runEnd:
       case gameOver:
+      case surviveEnd:
         return KioskScreen.runEnd;
       case select:
       case versus:
@@ -126,6 +128,7 @@ class AppState extends ChangeNotifier {
   static const _kKioskOn = 'plaza_brawler_kiosk_on_v1';
   static const _kKioskPin = 'plaza_brawler_kiosk_pin_v1';
   static const _kBossBeaten = 'plaza_brawler_boss_beaten_v1';
+  static const _kSurviveBest = 'plaza_brawler_survive_best_v1';
 
   final KioskController kiosk = KioskController();
   final HighScoreRepo highScores = HighScoreRepo();
@@ -147,6 +150,9 @@ class AppState extends ChangeNotifier {
   /// True once the arcade boss (Ophiuchus) has been beaten on this phone.
   /// Unlocks the secret roster. Loaded in [load].
   bool bossBeaten = false;
+
+  /// Best Survive run on this phone, opponents beaten. Loaded in [load].
+  int surviveBest = 0;
   bool _howToSeen = false;
   bool _howToSeenThisSession = false;
 
@@ -211,6 +217,7 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     chosenSign = await _read(_kSign);
     bossBeaten = await _read(_kBossBeaten) == '1';
+    surviveBest = int.tryParse(await _read(_kSurviveBest) ?? '') ?? 0;
     _howToSeen = await _read(_kHowTo) == '1';
     // Off unless the player turned it on (v2 key; the node's support is checked separately).
     matchShare.shareEnabled = await _read(_kShare) == '1';
@@ -244,6 +251,16 @@ class AppState extends ChangeNotifier {
     bossBeaten = true;
     await _write(_kBossBeaten, '1');
     notifyListeners();
+  }
+
+  /// Records a Survive run's length when it beats the best on this phone.
+  /// True when a new best was set. A shorter run never lowers the best.
+  Future<bool> recordSurviveBest(int beaten) async {
+    if (beaten <= surviveBest) return false;
+    surviveBest = beaten;
+    await _write(_kSurviveBest, '$beaten');
+    notifyListeners();
+    return true;
   }
 
   Future<void> markHowToPlaySeen() async {
@@ -353,6 +370,8 @@ class AppState extends ChangeNotifier {
     await feedback.clear();
     bossBeaten = false;
     await _write(_kBossBeaten, null);
+    surviveBest = 0;
+    await _write(_kSurviveBest, null);
     notifyListeners();
   }
 
