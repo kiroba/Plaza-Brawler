@@ -10,6 +10,8 @@
 // With an LPE profile the player keeps their handle and aura colour and
 // picks a fighting style (sign). Opponent mode adds the Ophiuchus boss
 // and, when the node's plaza has someone, a "Plaza challenger".
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
@@ -130,78 +132,183 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
         : omniNode.playerFighter('aries')?.handle;
     final current = _current;
     final color = Color(current.primary);
+    // A phone in landscape is only ~360 dp tall: the stacked layout
+    // (carousel + dossier + button) runs off the bottom, so the dossier
+    // and the CHOOSE button sit below the fold. Short screens get the
+    // side-by-side layout — carousel left, dossier + button right — so the
+    // whole screen fits at rest. BrawlerPage's scroll view stays as the
+    // fallback for anything still taller.
+    final shortScreen = MediaQuery.sizeOf(context).height < 520;
     return BrawlerPage(
       title: widget.title,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!widget.opponentMode)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                handle != null
-                    ? 'Your LPE fighter $handle: pick a fighting style.'
-                    : 'Pick your sign. Each one fights differently.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-            ),
-          const Text(
-            '◀  SWIPE — TAP THE CENTER FIGHTER TO CHOOSE  ▶',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 236,
-            child: PageView.builder(
-              controller: _controller,
-              onPageChanged: (p) => setState(() => _center = p),
-              itemBuilder: (context, virtual) {
-                final f = _roster[virtual % _roster.length];
-                final dist = (virtual - _center).abs();
-                final focus = dist == 0 ? 1.0 : (dist == 1 ? 0.82 : 0.7);
-                return AnimatedScale(
-                  scale: focus,
-                  duration: const Duration(milliseconds: 220),
-                  child: AnimatedOpacity(
-                    opacity: dist == 0 ? 1.0 : 0.55,
-                    duration: const Duration(milliseconds: 220),
-                    child: _CarouselCard(
-                      def: f,
-                      centered: dist == 0,
-                      locked: _locked(f),
-                      onTap: () =>
-                          dist == 0 ? _choose(f) : _spinTo(virtual),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 10),
-          _DetailPanel(def: current, accent: color, locked: _locked(current)),
-          const SizedBox(height: 14),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: color,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            onPressed: _locked(current) ? null : () => _choose(current),
+      child: shortScreen
+          ? _buildShort(context, current, color, handle)
+          : _buildStacked(current, color, handle),
+    );
+  }
+
+  /// The roomy layout: header, carousel, dossier, button, stacked.
+  /// Sized to fit an 800 dp tall screen at rest (Nov 26: the 236 dp
+  /// carousel + roomy gaps ran 34 dp past the fold): carousel 196, gaps
+  /// tightened. The page stays scrollable for anything still taller.
+  Widget _buildStacked(FighterDef current, Color color, String? handle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!widget.opponentMode)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
             child: Text(
-              _locked(current)
-                  ? '??? — BEAT OPHIUCHUS TO UNLOCK'
-                  : widget.opponentMode
-                      ? 'FIGHT THE ${_label(current).toUpperCase()}'
-                      : 'CHOOSE ${_label(current).toUpperCase()}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
+              handle != null
+                  ? 'Your LPE fighter $handle: pick a fighting style.'
+                  : 'Pick your sign. Each one fights differently.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
           ),
-        ],
+        const Text(
+          '◀  SWIPE — TAP THE CENTER FIGHTER TO CHOOSE  ▶',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+        const SizedBox(height: 6),
+        _carousel(196),
+        const SizedBox(height: 8),
+        _DetailPanel(def: current, accent: color, locked: _locked(current)),
+        const SizedBox(height: 10),
+        _chooseButton(color, current),
+      ],
+    );
+  }
+
+  /// The short-screen layout: one header line, then the carousel beside
+  /// the dossier + button, sized to the height BrawlerPage leaves us so
+  /// the whole screen fits at rest.
+  Widget _buildShort(
+    BuildContext context,
+    FighterDef current,
+    Color color,
+    String? handle,
+  ) {
+    final media = MediaQuery.of(context);
+    // The height BrawlerPage leaves for content: the screen minus the app
+    // bar, the safe-area insets, and BrawlerPage's own compact padding
+    // (10 dp each side on a short screen).
+    final contentHeight = media.size.height -
+        kToolbarHeight -
+        media.padding.top -
+        media.padding.bottom -
+        20;
+    // One header line only on a short screen; the swipe hint goes — the
+    // neighbours peeking in from the edges already say "swipe".
+    final hasHeader = !widget.opponentMode;
+    final headerHeight = hasHeader ? 24.0 : 0.0;
+    final rowHeight = math.max(160.0, contentHeight - headerHeight);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hasHeader)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              handle != null
+                  ? 'Your LPE fighter $handle: pick a fighting style.'
+                  : 'Pick your sign. Each one fights differently.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ),
+        SizedBox(
+          height: rowHeight,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _carousel(rowHeight)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // The dossier scrolls inside the row only if it is
+                    // still taller than the row (a long temperament on a
+                    // very short screen); the button always stays put.
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: _DetailPanel(
+                          def: current,
+                          accent: color,
+                          locked: _locked(current),
+                          compact: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _chooseButton(color, current, compact: true),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The infinity-scroll carousel at [height]: the roster wraps forever,
+  /// neighbours peek in from the edges, the centered fighter is the pick.
+  Widget _carousel(double height) {
+    return SizedBox(
+      height: height,
+      child: PageView.builder(
+        controller: _controller,
+        onPageChanged: (p) => setState(() => _center = p),
+        itemBuilder: (context, virtual) {
+          final f = _roster[virtual % _roster.length];
+          final dist = (virtual - _center).abs();
+          final focus = dist == 0 ? 1.0 : (dist == 1 ? 0.82 : 0.7);
+          return AnimatedScale(
+            scale: focus,
+            duration: const Duration(milliseconds: 220),
+            child: AnimatedOpacity(
+              opacity: dist == 0 ? 1.0 : 0.55,
+              duration: const Duration(milliseconds: 220),
+              child: _CarouselCard(
+                def: f,
+                centered: dist == 0,
+                locked: _locked(f),
+                onTap: () =>
+                    dist == 0 ? _choose(f) : _spinTo(virtual),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// The CHOOSE / FIGHT button for the centered fighter.
+  Widget _chooseButton(
+    Color color,
+    FighterDef current, {
+    bool compact = false,
+  }) {
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: EdgeInsets.symmetric(vertical: compact ? 10 : 14),
+      ),
+      onPressed: _locked(current) ? null : () => _choose(current),
+      child: Text(
+        _locked(current)
+            ? '??? — BEAT OPHIUCHUS TO UNLOCK'
+            : widget.opponentMode
+                ? 'FIGHT THE ${_label(current).toUpperCase()}'
+                : 'CHOOSE ${_label(current).toUpperCase()}',
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+        ),
       ),
     );
   }
@@ -265,25 +372,37 @@ class _CarouselCard extends StatelessWidget {
                 width: centered ? 3 : 1.5,
               ),
             ),
+            // The portrait flexes: on the 196 dp stacked carousel the
+            // card's inner box is only 182 dp, and the longest labels/subs
+            // need ~210 dp with a fixed 132 portrait (Nov 26 round 2: two
+            // RenderFlex overflows, 28 px and 9 px). The portrait takes
+            // whatever height is left after the labels, shrinking only as
+            // far as the card needs — the labels never shrink, and the
+            // card can never overflow its box.
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                locked
-                    ? const SizedBox(
-                        width: 132,
-                        height: 132,
-                        child: Center(
-                          child: Text(
-                            '?',
-                            style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 72,
-                              fontWeight: FontWeight.w900,
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: locked
+                        ? const SizedBox(
+                            width: 132,
+                            height: 132,
+                            child: Center(
+                              child: Text(
+                                '?',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 72,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      )
-                    : FighterPortrait(def: def, size: 132),
+                          )
+                        : FighterPortrait(def: def, size: 132),
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -324,26 +443,36 @@ class _DetailPanel extends StatelessWidget {
   /// The secret fighter before the boss win: no dossier at all, only the
   /// unlock criterion.
   final bool locked;
+
+  /// Tightens padding and gaps so the dossier fits beside the carousel
+  /// on a short (landscape) screen.
+  final bool compact;
   const _DetailPanel({
     required this.def,
     required this.accent,
     required this.locked,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     if (locked) {
       return Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        padding: EdgeInsets.fromLTRB(
+          14,
+          compact ? 8 : 10,
+          14,
+          compact ? 8 : 10,
+        ),
         decoration: BoxDecoration(
           color: BrawlerColors.panel,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: accent.withValues(alpha: 0.5)),
         ),
-        child: const Column(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
+            const Text(
               'A SECRET FIGHTER',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -352,8 +481,8 @@ class _DetailPanel extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 6),
-            Text(
+            SizedBox(height: compact ? 4 : 6),
+            const Text(
               'Beat Ophiuchus, the 13th Sign, to unlock this fighter. '
               'Win an arcade run to reveal who waits behind the boss.',
               textAlign: TextAlign.center,
@@ -376,7 +505,7 @@ class _DetailPanel extends StatelessWidget {
         def.temperament.isNotEmpty &&
         def.temperament.last == house.shade;
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: EdgeInsets.fromLTRB(14, compact ? 8 : 10, 14, compact ? 8 : 10),
       decoration: BoxDecoration(
         color: BrawlerColors.panel,
         borderRadius: BorderRadius.circular(14),
@@ -387,7 +516,7 @@ class _DetailPanel extends StatelessWidget {
         children: [
           if (wearsHouse)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.only(bottom: compact ? 6 : 8),
               child: Text(
                 '${_glyphs[def.sign] ?? ''} ${def.signTitle} · ${house.title} — ${house.domain}',
                 textAlign: TextAlign.center,
@@ -401,7 +530,7 @@ class _DetailPanel extends StatelessWidget {
             ),
           if (def.source != 'plaza')
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.only(bottom: compact ? 6 : 8),
               child: Text(
                 def.isBoss
                     ? 'ALL ELEMENTS'
@@ -420,32 +549,36 @@ class _DetailPanel extends StatelessWidget {
             value: s.power,
             base: wearsHouse ? base.power : null,
             color: accent,
+            compact: compact,
           ),
           _StatBar(
             label: 'Agility',
             value: s.agility,
             base: wearsHouse ? base.agility : null,
             color: accent,
+            compact: compact,
           ),
           _StatBar(
             label: 'Wit',
             value: s.wit,
             base: wearsHouse ? base.wit : null,
             color: accent,
+            compact: compact,
           ),
           _StatBar(
             label: 'Resolve',
             value: s.resolve,
             base: wearsHouse ? base.resolve : null,
             color: accent,
+            compact: compact,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: compact ? 6 : 8),
           Text(
             personality,
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white, fontSize: 13),
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: compact ? 0 : 2),
           Text(
             '“${tauntFor(def)}”',
             textAlign: TextAlign.center,
@@ -469,17 +602,22 @@ class _StatBar extends StatelessWidget {
   /// a difference renders as a +1 / -1 marker beside the effective value.
   final int? base;
   final Color color;
+
+  /// Tightens the row so the dossier fits beside the carousel on a
+  /// short (landscape) screen.
+  final bool compact;
   const _StatBar({
     required this.label,
     required this.value,
     this.base,
     required this.color,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      padding: EdgeInsets.symmetric(vertical: compact ? 1.5 : 2.0),
       child: Row(
         children: [
           SizedBox(
