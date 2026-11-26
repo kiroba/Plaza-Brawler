@@ -18,6 +18,7 @@ import '../audio/sfx.dart';
 import '../game/arcade.dart';
 import '../game/cpu_brain.dart';
 import '../game/fighter.dart';
+import '../game/survive.dart';
 import '../game/stages.dart';
 import '../game/gamepad_input.dart';
 import '../game/hit_feel.dart';
@@ -36,7 +37,7 @@ class FightConfig {
   final FighterDef p2;
   final int seed;
 
-  /// 'arcade' | 'quick' | 'attract'
+  /// 'arcade' | 'quick' | 'attract' | 'survive'
   final String mode;
 
   /// CPU difficulty for P2 (0..1).
@@ -44,6 +45,9 @@ class FightConfig {
 
   /// The arcade run (for the live score in the HUD and round scoring), or null.
   final ArcadeRun? run;
+
+  /// The survive run (for the live stage in the HUD and round scoring), or null.
+  final SurviveRun? survive;
 
   /// S2 lockstep driver when this is a PvP match (null for solo/attract).
   /// The lobby creates it over the S1 session; this screen attaches the
@@ -57,6 +61,7 @@ class FightConfig {
     this.mode = 'quick',
     this.difficulty = 0.5,
     this.run,
+    this.survive,
     this.lockstep,
   });
 
@@ -328,11 +333,15 @@ class _FighterScreenState extends State<FighterScreen>
         if (e.type == 'FIGHTER_ROUND_END') {
           if (_engine.results.isNotEmpty) {
             _cfg.run?.onRound(_engine.results.last);
+            _cfg.survive?.onRound(_engine.results.last);
         }
           omniNode.dispatchEvent(e.type, e.payload);
         } else if (e.type == 'FIGHTER_MATCH_END') {
           // Saved on this phone; also POSTed once to Omni Node when sharing is on (lib/net/match_share.dart).
-          appState.matchShare.shareMatch(e.payload, score: _cfg.run?.liveScore);
+          appState.matchShare.shareMatch(
+            e.payload,
+            score: _cfg.run?.liveScore ?? _cfg.survive?.liveScore,
+          );
         } else {
           omniNode.dispatchEvent(e.type, e.payload);
         }
@@ -438,7 +447,7 @@ class _FighterScreenState extends State<FighterScreen>
                       left: 8,
                       right: 8,
                       top: 4,
-                      child: _Hud(engine: _engine, run: _cfg.run),
+                      child: _Hud(engine: _engine, run: _cfg.run, survive: _cfg.survive),
                     ),
                     if (_bannerFrames > 0)
                       Positioned(
@@ -552,7 +561,8 @@ class _FighterScreenState extends State<FighterScreen>
 class _Hud extends StatelessWidget {
   final MatchEngine engine;
   final ArcadeRun? run;
-  const _Hud({required this.engine, this.run});
+  final SurviveRun? survive;
+  const _Hud({required this.engine, this.run, this.survive});
 
   @override
   Widget build(BuildContext context) {
@@ -606,6 +616,18 @@ class _Hud extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               'SCORE ${run!.liveScore}   FIGHT ${run!.reached}/${run!.length}',
+              style: const TextStyle(
+                color: BrawlerColors.gold,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        else if (survive != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              'SURVIVE  STAGE ${survive!.stageNumber}   BEST ${appState.surviveBest}',
               style: const TextStyle(
                 color: BrawlerColors.gold,
                 fontSize: 11,
