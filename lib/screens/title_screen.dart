@@ -284,16 +284,17 @@ class _MenuItem {
   });
 }
 
-/// The title menu as a phone-style icon grid, three tiles across. Two rows
-/// hold the whole menu (kiosk mode: four tiles), so it fits a landscape
-/// screen with no scrolling. Tile size stays constant on a short last row.
+/// The title menu as a phone-style icon grid. Three tiles across in portrait;
+/// four across on a short (landscape) screen, so the seven tiles still fit in
+/// two rows with no scrolling. Tile size stays constant on a short last row.
 class _MenuGrid extends StatelessWidget {
   final List<_MenuItem> items;
   const _MenuGrid({required this.items});
 
   @override
   Widget build(BuildContext context) {
-    const cols = 3;
+    final compact = MediaQuery.sizeOf(context).height < 520;
+    final cols = compact ? 4 : 3;
     final rows = <Widget>[];
     for (var i = 0; i < items.length; i += cols) {
       if (rows.isNotEmpty) rows.add(const SizedBox(height: 6));
