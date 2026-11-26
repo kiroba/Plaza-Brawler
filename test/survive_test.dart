@@ -45,7 +45,9 @@ SurviveRun _run() =>
     SurviveRun(seed: 7, player: offlineFighter('aries')!);
 
 void _win(SurviveRun run, [int times = 1]) {
-  for (var i = 0; i < times; i++) run.onFightEnd(playerWon: true);
+  for (var i = 0; i < times; i++) {
+    run.onFightEnd(playerWon: true);
+  }
 }
 
 void main() {

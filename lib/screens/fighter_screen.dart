@@ -622,7 +622,7 @@ class _Hud extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-          ),
+          )
         else if (survive != null)
           Padding(
             padding: const EdgeInsets.only(top: 2),
